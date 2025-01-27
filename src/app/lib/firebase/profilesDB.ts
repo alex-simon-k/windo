@@ -18,7 +18,7 @@ export interface SheetProfile {
   lastRun?: string;
   createdAt: string;
   updatedAt: string;
-  docId?: string; // Firestore document ID
+  docId: string; // Firestore document ID
 }
 
 interface AnalyticsData {

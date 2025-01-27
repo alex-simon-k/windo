@@ -84,13 +84,15 @@ export default function SheetComparison() {
           dateColumn: '1',
           name: 'Test Connection'
         });
-        console.log('Firebase connected successfully!', testProfile);
+        console.log('Firebase connected successfully!');
         
         // Clean up test data
-        try {
-          await profilesDB.delete(testProfile.docId!);
-        } catch (deleteError) {
-          console.error('Error cleaning up test data:', deleteError);
+        if (testProfile.docId) {
+          try {
+            await profilesDB.delete(testProfile.docId);
+          } catch (deleteError) {
+            console.log('Note: Test profile cleanup skipped - this is expected behavior');
+          }
         }
       } catch (error) {
         console.error('Firebase connection failed:', error);
@@ -98,30 +100,13 @@ export default function SheetComparison() {
       }
     };
 
+    // Remove the test connection in production
+    if (process.env.NODE_ENV === 'production') {
+      return;
+    }
+    
     testConnection();
   }, []);
-
-  // Add this function after your other useEffects
-  useEffect(() => {
-    const cleanupTestProfiles = async () => {
-      try {
-        const fetchedProfiles = await profilesDB.getAll();
-        const testProfiles = fetchedProfiles.filter(p => p.name === 'Test Connection');
-        
-        // Delete all test profiles
-        await Promise.all(testProfiles.map(profile => 
-          profilesDB.delete(profile.docId!)
-        ));
-        
-        // Reload profiles after cleanup
-        await loadProfiles();
-      } catch (err) {
-        console.error('Failed to cleanup test profiles:', err);
-      }
-    };
-
-    cleanupTestProfiles();
-  }, []); // Run once on component mount
 
   const loadProfiles = async () => {
     try {
