@@ -592,7 +592,7 @@ export default function SheetComparison() {
                     </div>
                     <div className="col-span-1 flex justify-end space-x-2">
                       <button
-                        onClick={() => setIsEditing(profile.docId)}
+                        onClick={() => setIsEditing(profile.docId ?? null)}
                         disabled={isRefreshing}
                         className={`text-blue-600 hover:text-blue-800 ${isRefreshing ? 'opacity-50' : ''}`}
                       >
