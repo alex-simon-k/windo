@@ -54,6 +54,7 @@ export default function SheetComparison() {
   const [refreshing, setRefreshing] = useState<string[]>([]);  // Track which profiles are refreshing
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<'magnitude' | 'name'>('magnitude');
 
   // Load profiles and analytics on mount
   useEffect(() => {
@@ -422,6 +423,25 @@ export default function SheetComparison() {
     }
   };
 
+  // Add a sorting function
+  const getSortedProfiles = (profiles: SheetProfile[]) => {
+    return [...profiles].sort((a, b) => {
+      if (sortBy === 'magnitude') {
+        const deltaA = calculateDelta(entryCounts, a.name);
+        const deltaB = calculateDelta(entryCounts, b.name);
+        
+        // Use absolute value for magnitude sorting
+        const magnitudeA = Math.abs(deltaA?.percentageChange || 0);
+        const magnitudeB = Math.abs(deltaB?.percentageChange || 0);
+        
+        return magnitudeB - magnitudeA; // Sort by highest magnitude first
+      } else {
+        // Default to name sorting
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      }
+    });
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
@@ -482,289 +502,310 @@ export default function SheetComparison() {
           </div>
         </div>
 
-        {/* Header */}
-        <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-100 rounded-t text-sm font-medium">
-          <div className="col-span-3">Profile Name</div>
-          <div className="col-span-2 text-center">Delta</div>
-          <div className="col-span-3 text-center">Yesterday</div>
-          <div className="col-span-3 text-center">Today</div>
-          <div className="col-span-1 text-right">Actions</div>
-        </div>
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 border-b">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xl font-semibold">Sheet Profiles</h2>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">Sort by:</label>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'magnitude' | 'name')}
+                    className="border rounded p-1 text-sm"
+                  >
+                    <option value="magnitude">Delta Magnitude</option>
+                    <option value="name">Name</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        {/* Profile List */}
-        <div className="space-y-1">
-          {profiles.map((profile, index) => {
-            const delta = calculateDelta(entryCounts, profile.name);
-            const isRefreshing = refreshing.includes(profile.docId!);
-            
-            return (
-              <div 
-                key={profile.docId}
-                className="grid grid-cols-12 gap-4 px-4 py-2 bg-white hover:bg-gray-50 border-b items-center text-sm"
-              >
-                {profile.docId === isEditing ? (
-                  // Edit Mode
-                  <>
-                    {/* Name Input */}
-                    <div className="col-span-11">
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-medium">Edit Profile</span>
-                          <button
-                            onClick={() => removeProfile(profile.docId!)}
-                            className="text-red-600 hover:text-red-800 flex items-center space-x-1 text-sm"
-                          >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            <span>Delete Profile</span>
-                          </button>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Profile Name"
-                          className="w-full p-2 border rounded text-black"
-                          value={profile.name}
-                          onChange={(e) => updateSheet(index, 'name', e.target.value)}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Spreadsheet ID"
-                          className="w-full p-2 border rounded text-black"
-                          value={profile.id}
-                          onChange={(e) => updateSheet(index, 'id', e.target.value)}
-                        />
-                        <input
-                          type="text"
-                          placeholder="Sheet Range (e.g., Sheet1!A2:Z1000)"
-                          className="w-full p-2 border rounded text-black"
-                          value={profile.range}
-                          onChange={(e) => updateSheet(index, 'range', e.target.value)}
-                        />
-                        <input
-                          type="number"
-                          placeholder="Date Column Number"
-                          className="w-full p-2 border rounded text-black"
-                          value={profile.dateColumn}
-                          onChange={(e) => updateSheet(index, 'dateColumn', e.target.value)}
-                        />
+          {/* Header */}
+          <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-100 rounded-t text-sm font-medium">
+            <div className="col-span-3">Profile Name</div>
+            <div className="col-span-2 text-center">Delta</div>
+            <div className="col-span-3 text-center">Yesterday</div>
+            <div className="col-span-3 text-center">Today</div>
+            <div className="col-span-1 text-right">Actions</div>
+          </div>
+
+          {/* Profile List - Use getSortedProfiles */}
+          <div className="space-y-1">
+            {getSortedProfiles(profiles).map((profile, index) => {
+              const delta = calculateDelta(entryCounts, profile.name);
+              const isRefreshing = refreshing.includes(profile.docId!);
+              
+              return (
+                <div 
+                  key={profile.docId}
+                  className="grid grid-cols-12 gap-4 px-4 py-2 bg-white hover:bg-gray-50 border-b items-center text-sm"
+                >
+                  {profile.docId === isEditing ? (
+                    // Edit Mode
+                    <>
+                      {/* Name Input */}
+                      <div className="col-span-11">
                         <div className="space-y-2">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">Filter Groups</span>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="font-medium">Edit Profile</span>
                             <button
-                              onClick={() => {
-                                const updatedProfile = {
-                                  ...profile,
-                                  filterGroups: [...(profile.filterGroups || []), {
-                                    filters: [{
-                                      column: 1,
-                                      value: '',
-                                      operator: 'contains' as const
-                                    }],
-                                    logicalOperator: 'AND' as const
-                                  }]
-                                };
-                                updateSheet(index, 'filterGroups', updatedProfile.filterGroups);
-                              }}
-                              className="text-blue-600 hover:text-blue-800 text-sm"
+                              onClick={() => removeProfile(profile.docId!)}
+                              className="text-red-600 hover:text-red-800 flex items-center space-x-1 text-sm"
                             >
-                              Add Filter Group
+                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                              <span>Delete Profile</span>
                             </button>
                           </div>
-                          {profile.filterGroups?.map((group, groupIndex) => (
-                            <div key={groupIndex} className="border rounded p-2 space-y-2">
-                              <div className="flex justify-between items-center">
-                                <select
-                                  className="p-1 border rounded text-sm"
-                                  value={group.logicalOperator}
-                                  onChange={(e) => {
-                                    const updatedGroups = [...(profile.filterGroups || [])];
-                                    updatedGroups[groupIndex] = {
-                                      ...group,
-                                      logicalOperator: e.target.value as 'AND' | 'OR'
-                                    };
-                                    updateSheet(index, 'filterGroups', updatedGroups);
-                                  }}
-                                >
-                                  <option value="AND">AND</option>
-                                  <option value="OR">OR</option>
-                                </select>
-                                <div className="flex space-x-2">
-                                  <button
-                                    onClick={() => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex].filters.push({
+                          <input
+                            type="text"
+                            placeholder="Profile Name"
+                            className="w-full p-2 border rounded text-black"
+                            value={profile.name}
+                            onChange={(e) => updateSheet(index, 'name', e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Spreadsheet ID"
+                            className="w-full p-2 border rounded text-black"
+                            value={profile.id}
+                            onChange={(e) => updateSheet(index, 'id', e.target.value)}
+                          />
+                          <input
+                            type="text"
+                            placeholder="Sheet Range (e.g., Sheet1!A2:Z1000)"
+                            className="w-full p-2 border rounded text-black"
+                            value={profile.range}
+                            onChange={(e) => updateSheet(index, 'range', e.target.value)}
+                          />
+                          <input
+                            type="number"
+                            placeholder="Date Column Number"
+                            className="w-full p-2 border rounded text-black"
+                            value={profile.dateColumn}
+                            onChange={(e) => updateSheet(index, 'dateColumn', e.target.value)}
+                          />
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium">Filter Groups</span>
+                              <button
+                                onClick={() => {
+                                  const updatedProfile = {
+                                    ...profile,
+                                    filterGroups: [...(profile.filterGroups || []), {
+                                      filters: [{
                                         column: 1,
                                         value: '',
-                                        operator: 'contains'
-                                      });
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                    className="text-blue-600 hover:text-blue-800 text-xs"
-                                  >
-                                    Add Condition
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups.splice(groupIndex, 1);
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              </div>
-                              {group.filters.map((filter, filterIndex) => (
-                                <div key={filterIndex} className="flex space-x-2">
-                                  <input
-                                    type="number"
-                                    placeholder="Column"
-                                    className="w-20 p-2 border rounded"
-                                    value={filter.column}
-                                    onChange={(e) => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex].filters[filterIndex] = {
-                                        ...filter,
-                                        column: parseInt(e.target.value) || 1
-                                      };
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                  />
-                                  <select
-                                    className="p-2 border rounded"
-                                    value={filter.operator}
-                                    onChange={(e) => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex].filters[filterIndex] = {
-                                        ...filter,
-                                        operator: e.target.value as FilterConfig['operator']
-                                      };
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                  >
-                                    <option value="contains">Contains</option>
-                                    <option value="equals">Equals</option>
-                                    <option value="startsWith">Starts with</option>
-                                    <option value="endsWith">Ends with</option>
-                                  </select>
-                                  <input
-                                    type="text"
-                                    placeholder="Value"
-                                    className="flex-1 p-2 border rounded"
-                                    value={filter.value}
-                                    onChange={(e) => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex].filters[filterIndex] = {
-                                        ...filter,
-                                        value: e.target.value
-                                      };
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex].filters.splice(filterIndex, 1);
-                                      if (updatedGroups[groupIndex].filters.length === 0) {
-                                        updatedGroups.splice(groupIndex, 1);
-                                      }
-                                      updateSheet(index, 'filterGroups', updatedGroups);
-                                    }}
-                                    className="text-red-600 hover:text-red-800"
-                                  >
-                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                  </button>
-                                </div>
-                              ))}
+                                        operator: 'contains' as const
+                                      }],
+                                      logicalOperator: 'AND' as const
+                                    }]
+                                  };
+                                  updateSheet(index, 'filterGroups', updatedProfile.filterGroups);
+                                }}
+                                className="text-blue-600 hover:text-blue-800 text-sm"
+                              >
+                                Add Filter Group
+                              </button>
                             </div>
-                          ))}
+                            {profile.filterGroups?.map((group, groupIndex) => (
+                              <div key={groupIndex} className="border rounded p-2 space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <select
+                                    className="p-1 border rounded text-sm"
+                                    value={group.logicalOperator}
+                                    onChange={(e) => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex] = {
+                                        ...group,
+                                        logicalOperator: e.target.value as 'AND' | 'OR'
+                                      };
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                  >
+                                    <option value="AND">AND</option>
+                                    <option value="OR">OR</option>
+                                  </select>
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={() => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups[groupIndex].filters.push({
+                                          column: 1,
+                                          value: '',
+                                          operator: 'contains'
+                                        });
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                      className="text-blue-600 hover:text-blue-800 text-xs"
+                                    >
+                                      Add Condition
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups.splice(groupIndex, 1);
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                      className="text-red-600 hover:text-red-800"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </div>
+                                {group.filters.map((filter, filterIndex) => (
+                                  <div key={filterIndex} className="flex space-x-2">
+                                    <input
+                                      type="number"
+                                      placeholder="Column"
+                                      className="w-20 p-2 border rounded"
+                                      value={filter.column}
+                                      onChange={(e) => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups[groupIndex].filters[filterIndex] = {
+                                          ...filter,
+                                          column: parseInt(e.target.value) || 1
+                                        };
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                    />
+                                    <select
+                                      className="p-2 border rounded"
+                                      value={filter.operator}
+                                      onChange={(e) => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups[groupIndex].filters[filterIndex] = {
+                                          ...filter,
+                                          operator: e.target.value as FilterConfig['operator']
+                                        };
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                    >
+                                      <option value="contains">Contains</option>
+                                      <option value="equals">Equals</option>
+                                      <option value="startsWith">Starts with</option>
+                                      <option value="endsWith">Ends with</option>
+                                    </select>
+                                    <input
+                                      type="text"
+                                      placeholder="Value"
+                                      className="flex-1 p-2 border rounded"
+                                      value={filter.value}
+                                      onChange={(e) => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups[groupIndex].filters[filterIndex] = {
+                                          ...filter,
+                                          value: e.target.value
+                                        };
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        const updatedGroups = [...(profile.filterGroups || [])];
+                                        updatedGroups[groupIndex].filters.splice(filterIndex, 1);
+                                        if (updatedGroups[groupIndex].filters.length === 0) {
+                                          updatedGroups.splice(groupIndex, 1);
+                                        }
+                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                      }}
+                                      className="text-red-600 hover:text-red-800"
+                                    >
+                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {/* Save/Cancel Buttons */}
-                    <div className="col-span-1 flex justify-end space-x-2">
-                      <button
-                        onClick={() => saveProfile(profile)}
-                        className="text-green-600 hover:text-green-800"
-                        title="Save"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => setIsEditing(null)}
-                        className="text-gray-600 hover:text-gray-800"
-                        title="Cancel"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  // View Mode - existing code
-                  <>
-                    <div className="col-span-3 font-medium truncate">
-                      {profile.name}
-                    </div>
-                    <div className="col-span-2 text-center">
-                      {delta && (
-                        <div className={`flex items-center justify-center space-x-1
-                          ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
+                      {/* Save/Cancel Buttons */}
+                      <div className="col-span-1 flex justify-end space-x-2">
+                        <button
+                          onClick={() => saveProfile(profile)}
+                          className="text-green-600 hover:text-green-800"
+                          title="Save"
                         >
-                          {delta.change > 0 ? (
-                            <ArrowTrendingUpIcon className="h-4 w-4" />
-                          ) : delta.change < 0 ? (
-                            <ArrowTrendingDownIcon className="h-4 w-4" />
-                          ) : null}
-                          <span>
-                            {delta.change > 0 ? '+' : ''}{delta.change}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="col-span-3 text-center font-mono">
-                      {delta?.yesterday || 0} entries
-                    </div>
-                    <div className="col-span-3 text-center font-mono">
-                      {delta?.today || 0} entries
-                    </div>
-                    <div className="col-span-1 flex justify-end space-x-2">
-                      <button
-                        onClick={() => setIsEditing(profile.docId ?? null)}
-                        disabled={isRefreshing}
-                        className={`text-blue-600 hover:text-blue-800 ${isRefreshing ? 'opacity-50' : ''}`}
-                      >
-                        <PencilIcon className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => runAnalysis(profile)}
-                        disabled={isRefreshing}
-                        className={`text-green-600 hover:text-green-800 ${isRefreshing ? 'opacity-50' : ''}`}
-                      >
-                        {isRefreshing ? (
-                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
-                        ) : (
-                          <PlayIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setIsEditing(null)}
+                          className="text-gray-600 hover:text-gray-800"
+                          title="Cancel"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    // View Mode - existing code
+                    <>
+                      <div className="col-span-3 font-medium truncate">
+                        {profile.name}
+                      </div>
+                      <div className="col-span-2 text-center">
+                        {delta && (
+                          <div className={`flex items-center justify-center space-x-1
+                            ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
+                          >
+                            {delta.change > 0 ? (
+                              <ArrowTrendingUpIcon className="h-4 w-4" />
+                            ) : delta.change < 0 ? (
+                              <ArrowTrendingDownIcon className="h-4 w-4" />
+                            ) : null}
+                            <span>
+                              {delta.change > 0 ? '+' : ''}{delta.change}
+                            </span>
+                          </div>
                         )}
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+                      </div>
+                      <div className="col-span-3 text-center font-mono">
+                        {delta?.yesterday || 0} entries
+                      </div>
+                      <div className="col-span-3 text-center font-mono">
+                        {delta?.today || 0} entries
+                      </div>
+                      <div className="col-span-1 flex justify-end space-x-2">
+                        <button
+                          onClick={() => setIsEditing(profile.docId ?? null)}
+                          disabled={isRefreshing}
+                          className={`text-blue-600 hover:text-blue-800 ${isRefreshing ? 'opacity-50' : ''}`}
+                        >
+                          <PencilIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => runAnalysis(profile)}
+                          disabled={isRefreshing}
+                          className={`text-green-600 hover:text-green-800 ${isRefreshing ? 'opacity-50' : ''}`}
+                        >
+                          {isRefreshing ? (
+                            <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                          ) : (
+                            <PlayIcon className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {showAddNew && (
