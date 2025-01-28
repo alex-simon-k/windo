@@ -53,6 +53,7 @@ export default function SheetComparison() {
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string[]>([]);  // Track which profiles are refreshing
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'magnitude' | 'name'>('magnitude');
 
@@ -327,11 +328,6 @@ export default function SheetComparison() {
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
-      // Check if the value is actually different before updating
-      if (JSON.stringify(profiles[index][field]) === JSON.stringify(value)) {
-        return; // Skip update if value hasn't changed
-      }
-
       // Create a new array with the updated profile
       const updatedProfiles = profiles.map((profile, i) => {
         if (i === index) {
@@ -359,7 +355,6 @@ export default function SheetComparison() {
           filterGroups: updatedProfile.filterGroups || []
         });
 
-        // Log the update for debugging
         console.log('Profile updated:', {
           field,
           oldValue: profiles[index][field],
@@ -381,14 +376,28 @@ export default function SheetComparison() {
   ) => {
     // Clear any previous errors
     setError(null);
-    
-    // Debounce the update to prevent rapid-fire updates
-    const timeoutId = setTimeout(() => {
-      updateSheet(index, field, value);
-    }, 300); // Wait 300ms before updating
 
-    // Cleanup timeout on next render
-    return () => clearTimeout(timeoutId);
+    // Clear any existing timeout
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Update the local state immediately for responsiveness
+    const updatedProfiles = profiles.map((profile, i) => {
+      if (i === index) {
+        return {
+          ...profile,
+          [field]: value
+        };
+      }
+      return profile;
+    });
+    setProfiles(updatedProfiles);
+    
+    // Debounce the Firebase update
+    debounceTimerRef.current = setTimeout(() => {
+      updateSheet(index, field, value);
+    }, 500);
   };
 
   const calculateDelta = (entryCounts: EntryCount[], sheetName: string): DeltaChange | null => {
