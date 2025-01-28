@@ -102,65 +102,94 @@ export const fetchSheetData = async (
     throw new Error('Missing required parameters: spreadsheetId and range are required');
   }
 
+  // Add range validation and cleanup
   try {
-    console.log('Initializing Google Sheets client...');
-    const sheets = await initializeGoogleSheets();
+    // Clean up the range string
+    const cleanRange = range.trim().replace(/\s+/g, '');
     
-    console.log(`Fetching data from spreadsheet: ${spreadsheetId}, range: ${range}`);
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range,
-    });
-
-    if (!response.data.values) {
-      console.log('No data found in sheet');
-      return [];
+    // Validate range format
+    if (!cleanRange.includes('!')) {
+      throw new Error(`Invalid range format: missing '!' separator. Range: ${range}`);
     }
 
-    console.log(`Retrieved ${response.data.values.length} rows of data`);
-    const rows = response.data.values;
-    
-    // Transform data to include dates from specified column and apply filters
-    return rows.map((row: string[], index: number) => {
-      if (!Array.isArray(row)) {
-        console.warn(`Invalid row data at index ${index}:`, row);
-        return {
-          date: '',
-          values: [],
-          rowIndex: index + 1,
-          matchesFilters: false
-        };
-      }
+    const [sheetName, cellRange] = cleanRange.split('!');
+    if (!sheetName || !cellRange) {
+      throw new Error(`Invalid range format: could not parse sheet name or cell range. Range: ${range}`);
+    }
 
-      const values = [...row];
-      const date = values.length > dateColumnIndex ? values.splice(dateColumnIndex, 1)[0] : '';
-      const matchesFilters = applyFilters(row, filterGroups);
+    if (!cellRange.includes(':')) {
+      throw new Error(`Invalid range format: missing ':' in cell range. Range: ${range}`);
+    }
+
+    console.log('Range validation:', {
+      original: range,
+      cleaned: cleanRange,
+      sheetName,
+      cellRange,
+    });
+
+    try {
+      console.log('Initializing Google Sheets client...');
+      const sheets = await initializeGoogleSheets();
       
-      return {
-        date: date || '',
-        values,
-        rowIndex: index + 1,
-        matchesFilters
-      };
-    });
-  } catch (error: unknown) {
-    console.error('Error fetching sheet data:', {
-      error,
-      spreadsheetId,
-      range,
-      dateColumnIndex
-    });
-    
-    // Check for specific Google Sheets API errors
-    if (error instanceof GaxiosError) {
-      if (error.response?.status === 403) {
-        throw new Error('Access denied. Please check if the service account has access to this spreadsheet.');
+      console.log(`Fetching data from spreadsheet: ${spreadsheetId}, range: ${cleanRange}`);
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: cleanRange, // Use the cleaned range
+      });
+
+      if (!response.data.values) {
+        console.log('No data found in sheet');
+        return [];
       }
-      if (error.response?.status === 404) {
-        throw new Error('Spreadsheet not found. Please check the spreadsheet ID.');
+
+      console.log(`Retrieved ${response.data.values.length} rows of data`);
+      const rows = response.data.values;
+      
+      // Transform data to include dates from specified column and apply filters
+      return rows.map((row: string[], index: number) => {
+        if (!Array.isArray(row)) {
+          console.warn(`Invalid row data at index ${index}:`, row);
+          return {
+            date: '',
+            values: [],
+            rowIndex: index + 1,
+            matchesFilters: false
+          };
+        }
+
+        const values = [...row];
+        const date = values.length > dateColumnIndex ? values.splice(dateColumnIndex, 1)[0] : '';
+        const matchesFilters = applyFilters(row, filterGroups);
+        
+        return {
+          date: date || '',
+          values,
+          rowIndex: index + 1,
+          matchesFilters
+        };
+      });
+    } catch (error: unknown) {
+      console.error('Error fetching sheet data:', {
+        error,
+        spreadsheetId,
+        range: cleanRange,
+        dateColumnIndex
+      });
+      
+      // Check for specific Google Sheets API errors
+      if (error instanceof GaxiosError) {
+        if (error.response?.status === 403) {
+          throw new Error('Access denied. Please check if the service account has access to this spreadsheet.');
+        }
+        if (error.response?.status === 404) {
+          throw new Error('Spreadsheet not found. Please check the spreadsheet ID.');
+        }
       }
+      
+      throw error;
     }
-    
+  } catch (error) {
     throw new Error(
       'Failed to fetch sheet data: ' + 
       (error instanceof Error ? error.message : 'Unknown error')

@@ -12,19 +12,38 @@ export async function GET(request: NextRequest) {
     const dateColumn = searchParams.get('dateColumn');
     const filterGroupsParam = searchParams.get('filterGroups');
     
+    console.log('API Request parameters:', {
+      spreadsheetId,
+      range,
+      dateColumn,
+      hasFilterGroups: !!filterGroupsParam
+    });
+
     let filterGroups: SheetProfile['filterGroups'] = undefined;
     if (filterGroupsParam) {
       try {
         filterGroups = JSON.parse(filterGroupsParam);
+        console.log('Parsed filter groups:', filterGroups);
       } catch (err) {
         console.error('Error parsing filter groups:', err);
-        return NextResponse.json({ error: 'Invalid filter groups format' }, { status: 400 });
+        return NextResponse.json({ 
+          error: 'Invalid filter groups format',
+          details: err instanceof Error ? err.message : 'Unknown parsing error'
+        }, { status: 400 });
       }
     }
 
     if (!spreadsheetId || !range || !dateColumn) {
+      const missingParams = [];
+      if (!spreadsheetId) missingParams.push('spreadsheetId');
+      if (!range) missingParams.push('range');
+      if (!dateColumn) missingParams.push('dateColumn');
+      
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { 
+          error: 'Missing required parameters',
+          missingParams 
+        },
         { status: 400 }
       );
     }
@@ -59,7 +78,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { 
           error: error instanceof Error ? error.message : 'Failed to fetch sheet data',
-          details: process.env.NODE_ENV === 'development' ? error : undefined
+          details: process.env.NODE_ENV === 'development' ? error : undefined,
+          params: {
+            spreadsheetId,
+            range,
+            dateColumn: parseInt(dateColumn) - 1
+          }
         },
         { status: 500 }
       );
@@ -67,7 +91,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('API route error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      },
       { status: 500 }
     );
   }
