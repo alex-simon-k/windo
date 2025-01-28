@@ -328,44 +328,47 @@ export default function SheetComparison() {
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
-      // Create a new array with the updated profile
-      const updatedProfiles = profiles.map((profile, i) => {
-        if (i === index) {
-          return {
-            ...profile,
-            [field]: value
-          };
-        }
-        return profile;
-      });
-
-      // Get the updated profile
-      const updatedProfile = updatedProfiles[index];
+      // Get the current profile
+      const currentProfile = profiles[index];
+      
+      // Create the updated profile
+      const updatedProfile = {
+        ...currentProfile,
+        [field]: value
+      };
 
       // Update state immediately for responsive UI
+      const updatedProfiles = [...profiles];
+      updatedProfiles[index] = updatedProfile;
       setProfiles(updatedProfiles);
       
       // Persist to Firebase if we have a docId
       if (updatedProfile.docId) {
-        await profilesDB.update(updatedProfile.docId, {
+        const profileData = {
           id: updatedProfile.id,
           range: updatedProfile.range,
           dateColumn: updatedProfile.dateColumn,
           name: updatedProfile.name,
           filterGroups: updatedProfile.filterGroups || []
-        });
+        };
 
+        await profilesDB.update(updatedProfile.docId, profileData);
+
+        // Log the update with full details
         console.log('Profile updated:', {
           field,
-          oldValue: profiles[index][field],
+          oldValue: currentProfile[field],
           newValue: value,
-          profileBefore: profiles[index],
-          profileAfter: updatedProfile
+          profileBefore: currentProfile,
+          profileAfter: updatedProfile,
+          profileData
         });
       }
     } catch (err) {
       console.error('Error updating profile:', err);
       setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      // Revert the state on error
+      setProfiles([...profiles]);
     }
   };
 
@@ -383,16 +386,22 @@ export default function SheetComparison() {
     }
 
     // Update the local state immediately for responsiveness
-    const updatedProfiles = profiles.map((profile, i) => {
-      if (i === index) {
-        return {
-          ...profile,
-          [field]: value
-        };
-      }
-      return profile;
-    });
+    const currentProfile = profiles[index];
+    const updatedProfile = {
+      ...currentProfile,
+      [field]: value
+    };
+    
+    const updatedProfiles = [...profiles];
+    updatedProfiles[index] = updatedProfile;
     setProfiles(updatedProfiles);
+
+    // Log the immediate state update
+    console.log('Input changed:', {
+      field,
+      oldValue: currentProfile[field],
+      newValue: value
+    });
     
     // Debounce the Firebase update
     debounceTimerRef.current = setTimeout(() => {
