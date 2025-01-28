@@ -380,33 +380,57 @@ export default function SheetComparison() {
     // Clear any previous errors
     setError(null);
 
-    // Clear any existing timeout
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Update the local state immediately for responsiveness
+    // Get the current profile
     const currentProfile = profiles[index];
+    
+    // Create the updated profile
     const updatedProfile = {
       ...currentProfile,
       [field]: value
     };
-    
+
+    // Update state immediately
     const updatedProfiles = [...profiles];
     updatedProfiles[index] = updatedProfile;
     setProfiles(updatedProfiles);
 
-    // Log the immediate state update
-    console.log('Input changed:', {
-      field,
-      oldValue: currentProfile[field],
-      newValue: value
-    });
-    
-    // Debounce the Firebase update
-    debounceTimerRef.current = setTimeout(() => {
-      updateSheet(index, field, value);
-    }, 500);
+    // Save to Firebase immediately if it's a simple field update
+    if (typeof value === 'string' && updatedProfile.docId) {
+      profilesDB.update(updatedProfile.docId, {
+        ...updatedProfile,
+        filterGroups: updatedProfile.filterGroups || []
+      }).catch(err => {
+        console.error('Error saving to Firebase:', err);
+        setError('Failed to save changes');
+      });
+    }
+  };
+
+  const handleNumberInput = (
+    index: number,
+    field: keyof SheetProfile,
+    event: React.ChangeEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    const input = event.currentTarget;
+    let value = input.value;
+
+    // Handle arrow keys
+    if ('key' in event) {
+      const currentValue = parseInt(profiles[index][field] as string) || 0;
+      if (event.key === 'ArrowUp') {
+        value = (currentValue + 1).toString();
+      } else if (event.key === 'ArrowDown') {
+        value = (currentValue - 1).toString();
+      } else {
+        return; // Not an arrow key, exit
+      }
+    }
+
+    // Ensure value is a positive number
+    const numValue = parseInt(value);
+    if (numValue > 0) {
+      handleInputChange(index, field, numValue.toString());
+    }
   };
 
   const calculateDelta = (entryCounts: EntryCount[], sheetName: string): DeltaChange | null => {
@@ -654,7 +678,9 @@ export default function SheetComparison() {
                             placeholder="Date Column Number"
                             className="w-full p-2 border rounded text-black"
                             value={profile.dateColumn}
-                            onChange={(e) => handleInputChange(index, 'dateColumn', e.target.value)}
+                            onChange={(e) => handleNumberInput(index, 'dateColumn', e)}
+                            onKeyDown={(e) => handleNumberInput(index, 'dateColumn', e)}
+                            min="1"
                           />
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
