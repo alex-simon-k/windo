@@ -6,24 +6,25 @@ export const dynamic = 'force-dynamic'; // This is important for dynamic API rou
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
+    const searchParams = new URL(request.url).searchParams;
     const spreadsheetId = searchParams.get('spreadsheetId');
     const range = searchParams.get('range');
     const dateColumn = searchParams.get('dateColumn');
-    const filtersParam = searchParams.get('filters');
+    const filterGroupsParam = searchParams.get('filterGroups');
     
-    let filters: SheetProfile['filters'] = undefined;
-    if (filtersParam) {
+    let filterGroups: SheetProfile['filterGroups'] = undefined;
+    if (filterGroupsParam) {
       try {
-        filters = JSON.parse(filtersParam);
-      } catch (e) {
-        console.error('Failed to parse filters:', e);
+        filterGroups = JSON.parse(filterGroupsParam);
+      } catch (err) {
+        console.error('Error parsing filter groups:', err);
+        return NextResponse.json({ error: 'Invalid filter groups format' }, { status: 400 });
       }
     }
 
-    if (!spreadsheetId || !range) {
+    if (!spreadsheetId || !range || !dateColumn) {
       return NextResponse.json(
-        { error: 'Missing required parameters: spreadsheetId and range are required' },
+        { error: 'Missing required parameters' },
         { status: 400 }
       );
     }
@@ -46,8 +47,12 @@ export async function GET(request: NextRequest) {
     });
 
     try {
-      const dateColumnIndex = dateColumn ? parseInt(dateColumn) - 1 : 0;
-      const data = await fetchSheetData(spreadsheetId, range, dateColumnIndex, filters);
+      const data = await fetchSheetData(
+        spreadsheetId,
+        range,
+        parseInt(dateColumn) - 1, // Convert to 0-based index
+        filterGroups
+      );
       return NextResponse.json(data);
     } catch (error) {
       console.error('Sheet data fetch error:', error);

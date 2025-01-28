@@ -96,7 +96,7 @@ export const fetchSheetData = async (
   spreadsheetId: string, 
   range: string,
   dateColumnIndex: number = 0,
-  filters?: SheetProfile['filters']
+  filterGroups?: SheetProfile['filterGroups']
 ): Promise<SheetData[]> => {
   if (!spreadsheetId || !range) {
     throw new Error('Missing required parameters: spreadsheetId and range are required');
@@ -134,7 +134,7 @@ export const fetchSheetData = async (
 
       const values = [...row];
       const date = values.length > dateColumnIndex ? values.splice(dateColumnIndex, 1)[0] : '';
-      const matchesFilters = applyFilters(row, filters);
+      const matchesFilters = applyFilters(row, filterGroups);
       
       return {
         date: date || '',
