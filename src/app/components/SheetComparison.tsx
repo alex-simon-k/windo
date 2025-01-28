@@ -327,17 +327,52 @@ export default function SheetComparison() {
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
-      const updatedProfiles = [...profiles];
-      const profile = { ...updatedProfiles[index], [field]: value };
-      console.log('Updating profile with:', { field, value, profile });
-      updatedProfiles[index] = profile;
+      // Create a deep copy of the profiles array
+      const updatedProfiles = JSON.parse(JSON.stringify(profiles));
+      
+      // Create a new profile object with the updated field
+      const updatedProfile = {
+        ...updatedProfiles[index],
+        [field]: value
+      };
+
+      // Log the update for debugging
+      console.log('Updating profile:', {
+        field,
+        oldValue: profiles[index][field],
+        newValue: value,
+        profileBefore: profiles[index],
+        profileAfter: updatedProfile
+      });
+
+      // Update the profile in the array
+      updatedProfiles[index] = updatedProfile;
+
+      // Update state with the new array
       setProfiles(updatedProfiles);
       
       // If we're in edit mode, we don't want to save to Firebase immediately
       // The save will happen when the user clicks the Save button
     } catch (err) {
-      setError('Failed to update profile');
-      console.error(err);
+      console.error('Error updating profile:', err);
+      setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
+  // Add a function to handle input changes with debouncing
+  const handleInputChange = (
+    index: number,
+    field: keyof SheetProfile,
+    value: string | FilterConfig[] | FilterGroup[]
+  ) => {
+    // Clear any previous errors
+    setError(null);
+    
+    try {
+      updateSheet(index, field, value);
+    } catch (err) {
+      console.error('Error handling input change:', err);
+      setError('Failed to update field: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -565,28 +600,28 @@ export default function SheetComparison() {
                             placeholder="Profile Name"
                             className="w-full p-2 border rounded text-black"
                             value={profile.name}
-                            onChange={(e) => updateSheet(index, 'name', e.target.value)}
+                            onChange={(e) => handleInputChange(index, 'name', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Spreadsheet ID"
                             className="w-full p-2 border rounded text-black"
                             value={profile.id}
-                            onChange={(e) => updateSheet(index, 'id', e.target.value)}
+                            onChange={(e) => handleInputChange(index, 'id', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Sheet Range (e.g., Sheet1!A2:Z1000)"
                             className="w-full p-2 border rounded text-black"
                             value={profile.range}
-                            onChange={(e) => updateSheet(index, 'range', e.target.value)}
+                            onChange={(e) => handleInputChange(index, 'range', e.target.value)}
                           />
                           <input
                             type="number"
                             placeholder="Date Column Number"
                             className="w-full p-2 border rounded text-black"
                             value={profile.dateColumn}
-                            onChange={(e) => updateSheet(index, 'dateColumn', e.target.value)}
+                            onChange={(e) => handleInputChange(index, 'dateColumn', e.target.value)}
                           />
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
@@ -604,7 +639,7 @@ export default function SheetComparison() {
                                       logicalOperator: 'AND' as const
                                     }]
                                   };
-                                  updateSheet(index, 'filterGroups', updatedProfile.filterGroups);
+                                  handleInputChange(index, 'filterGroups', updatedProfile.filterGroups);
                                 }}
                                 className="text-blue-600 hover:text-blue-800 text-sm"
                               >
@@ -623,7 +658,7 @@ export default function SheetComparison() {
                                         ...group,
                                         logicalOperator: e.target.value as 'AND' | 'OR'
                                       };
-                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                      handleInputChange(index, 'filterGroups', updatedGroups);
                                     }}
                                   >
                                     <option value="AND">AND</option>
@@ -638,7 +673,7 @@ export default function SheetComparison() {
                                           value: '',
                                           operator: 'contains'
                                         });
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-blue-600 hover:text-blue-800 text-xs"
                                     >
@@ -648,7 +683,7 @@ export default function SheetComparison() {
                                       onClick={() => {
                                         const updatedGroups = [...(profile.filterGroups || [])];
                                         updatedGroups.splice(groupIndex, 1);
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-red-600 hover:text-red-800"
                                     >
@@ -671,7 +706,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           column: parseInt(e.target.value) || 1
                                         };
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                     />
                                     <select
@@ -683,7 +718,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           operator: e.target.value as FilterConfig['operator']
                                         };
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                     >
                                       <option value="contains">Contains</option>
@@ -702,7 +737,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           value: e.target.value
                                         };
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                     />
                                     <button
@@ -712,7 +747,7 @@ export default function SheetComparison() {
                                         if (updatedGroups[groupIndex].filters.length === 0) {
                                           updatedGroups.splice(groupIndex, 1);
                                         }
-                                        updateSheet(index, 'filterGroups', updatedGroups);
+                                        handleInputChange(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-red-600 hover:text-red-800"
                                     >
