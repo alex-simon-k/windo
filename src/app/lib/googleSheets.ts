@@ -5,26 +5,47 @@ import { SheetProfile, FilterConfig, FilterGroup } from './firebase/profilesDB';
 
 // Function to properly format the private key
 const formatPrivateKey = (key: string): string => {
-  // Remove any extra quotes and spaces
-  let formattedKey = key.trim();
-  
-  // Remove wrapping quotes if they exist
-  if (formattedKey.startsWith('"') && formattedKey.endsWith('"')) {
-    formattedKey = formattedKey.slice(1, -1);
+  try {
+    // Remove any extra quotes and spaces
+    let formattedKey = key.trim();
+    
+    // Remove wrapping quotes if they exist
+    if (formattedKey.startsWith('"') && formattedKey.endsWith('"')) {
+      formattedKey = formattedKey.slice(1, -1);
+    }
+    
+    // Normalize newlines
+    formattedKey = formattedKey
+      .replace(/\\n/g, '\n') // Replace literal \n with actual newlines
+      .replace(/\r\n/g, '\n') // Replace Windows line endings
+      .replace(/\r/g, '\n'); // Replace any remaining carriage returns
+    
+    // Ensure proper spacing and format
+    const lines = formattedKey.split('\n').map(line => line.trim()).filter(Boolean);
+    
+    // Check for header and footer
+    if (!lines[0]?.includes('-----BEGIN PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format: missing header');
+    }
+    if (!lines[lines.length - 1]?.includes('-----END PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format: missing footer');
+    }
+    
+    // Reconstruct the key with proper formatting
+    return [
+      '-----BEGIN PRIVATE KEY-----',
+      ...lines
+        .slice(1, -1) // Get all lines except header and footer
+        .filter(line => line && !line.includes('PRIVATE KEY')), // Remove any duplicate headers/footers
+      '-----END PRIVATE KEY-----'
+    ].join('\n');
+  } catch (error) {
+    console.error('Error formatting private key:', error);
+    throw new Error(
+      'Failed to format private key: ' + 
+      (error instanceof Error ? error.message : 'Unknown error')
+    );
   }
-  
-  // Replace literal \n with actual newlines
-  formattedKey = formattedKey.replace(/\\n/g, '\n');
-  
-  // Ensure the key has the correct header and footer
-  if (!formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
-    throw new Error('Invalid private key format: missing header');
-  }
-  if (!formattedKey.includes('-----END PRIVATE KEY-----')) {
-    throw new Error('Invalid private key format: missing footer');
-  }
-  
-  return formattedKey;
 };
 
 // Initialize Google Sheets client
@@ -37,6 +58,13 @@ const initializeGoogleSheets = async () => {
     // Format the private key properly
     const privateKey = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
     
+    console.log('Private key validation:', {
+      length: privateKey.length,
+      hasHeader: privateKey.includes('-----BEGIN PRIVATE KEY-----'),
+      hasFooter: privateKey.includes('-----END PRIVATE KEY-----'),
+      lineCount: privateKey.split('\n').length,
+    });
+    
     const client = new JWT({
       email: process.env.GOOGLE_CLIENT_EMAIL,
       key: privateKey,
@@ -46,7 +74,10 @@ const initializeGoogleSheets = async () => {
     return google.sheets({ version: 'v4', auth: client });
   } catch (error) {
     console.error('Error initializing Google Sheets client:', error);
-    throw new Error('Failed to initialize Google Sheets client: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    throw new Error(
+      'Failed to initialize Google Sheets client: ' + 
+      (error instanceof Error ? error.message : 'Unknown error')
+    );
   }
 };
 
