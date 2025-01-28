@@ -19,6 +19,11 @@ export interface SheetProfile {
   createdAt: string;
   updatedAt: string;
   docId: string; // Firestore document ID
+  filters?: {
+    column: number;
+    value: string;
+    operator: 'equals' | 'contains' | 'startsWith' | 'endsWith';
+  }[];
 }
 
 interface AnalyticsData {

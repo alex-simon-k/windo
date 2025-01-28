@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import { GaxiosError } from 'gaxios';
+import { SheetProfile } from './firebase/profilesDB';
 
 // Function to properly format the private key
 const formatPrivateKey = (key: string): string => {
@@ -43,12 +44,34 @@ export interface SheetData {
   date: string;
   values: string[];
   rowIndex: number;
+  matchesFilters: boolean;
 }
+
+const applyFilters = (row: string[], filters?: SheetProfile['filters']): boolean => {
+  if (!filters || filters.length === 0) return true;
+
+  return filters.every(filter => {
+    const value = row[filter.column - 1] || '';
+    switch (filter.operator) {
+      case 'equals':
+        return value.toLowerCase() === filter.value.toLowerCase();
+      case 'contains':
+        return value.toLowerCase().includes(filter.value.toLowerCase());
+      case 'startsWith':
+        return value.toLowerCase().startsWith(filter.value.toLowerCase());
+      case 'endsWith':
+        return value.toLowerCase().endsWith(filter.value.toLowerCase());
+      default:
+        return true;
+    }
+  });
+};
 
 export const fetchSheetData = async (
   spreadsheetId: string, 
   range: string,
-  dateColumnIndex: number = 0
+  dateColumnIndex: number = 0,
+  filters?: SheetProfile['filters']
 ): Promise<SheetData[]> => {
   if (!spreadsheetId || !range) {
     throw new Error('Missing required parameters: spreadsheetId and range are required');
@@ -72,24 +95,27 @@ export const fetchSheetData = async (
     console.log(`Retrieved ${response.data.values.length} rows of data`);
     const rows = response.data.values;
     
-    // Transform data to include dates from specified column
+    // Transform data to include dates from specified column and apply filters
     return rows.map((row: string[], index: number) => {
       if (!Array.isArray(row)) {
         console.warn(`Invalid row data at index ${index}:`, row);
         return {
           date: '',
           values: [],
-          rowIndex: index + 1
+          rowIndex: index + 1,
+          matchesFilters: false
         };
       }
 
       const values = [...row];
       const date = values.length > dateColumnIndex ? values.splice(dateColumnIndex, 1)[0] : '';
+      const matchesFilters = applyFilters(row, filters);
       
       return {
         date: date || '',
         values,
-        rowIndex: index + 1
+        rowIndex: index + 1,
+        matchesFilters
       };
     });
   } catch (error: unknown) {

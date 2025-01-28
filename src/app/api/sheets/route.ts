@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetData } from '@/app/lib/googleSheets';
+import { SheetProfile } from '@/app/lib/firebase/profilesDB';
 
 export const dynamic = 'force-dynamic'; // This is important for dynamic API routes
 
@@ -9,6 +10,16 @@ export async function GET(request: NextRequest) {
     const spreadsheetId = searchParams.get('spreadsheetId');
     const range = searchParams.get('range');
     const dateColumn = searchParams.get('dateColumn');
+    const filtersParam = searchParams.get('filters');
+    
+    let filters: SheetProfile['filters'] = undefined;
+    if (filtersParam) {
+      try {
+        filters = JSON.parse(filtersParam);
+      } catch (e) {
+        console.error('Failed to parse filters:', e);
+      }
+    }
 
     if (!spreadsheetId || !range) {
       return NextResponse.json(
@@ -28,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     try {
       const dateColumnIndex = dateColumn ? parseInt(dateColumn) - 1 : 0;
-      const data = await fetchSheetData(spreadsheetId, range, dateColumnIndex);
+      const data = await fetchSheetData(spreadsheetId, range, dateColumnIndex, filters);
       return NextResponse.json(data);
     } catch (error) {
       console.error('Sheet data fetch error:', error);

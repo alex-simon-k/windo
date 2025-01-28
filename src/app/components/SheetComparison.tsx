@@ -42,6 +42,12 @@ interface DeltaChange {
   percentageChange: number;
 }
 
+interface FilterConfig {
+  column: number;
+  value: string;
+  operator: 'equals' | 'contains' | 'startsWith' | 'endsWith';
+}
+
 export default function SheetComparison() {
   const [profiles, setProfiles] = useState<SheetProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -198,7 +204,10 @@ export default function SheetComparison() {
         }
         
         const sheetData = await response.json();
-        const sheetComparisons = compareData(sheetData, sheet.name);
+        const sheetComparisons = compareData(
+          sheetData.filter((row: SheetData) => row.matchesFilters),
+          sheet.name
+        );
         const sheetEntryCounts = countEntriesPerDay(sheetData, sheet.name);
         
         // Update only the data for this specific sheet
@@ -245,6 +254,9 @@ export default function SheetComparison() {
       
       const dailyEntries = sheetData.filter(row => {
         try {
+          // Only count entries that match filters
+          if (!row.matchesFilters) return false;
+          
           // Handle timestamp format: "2025-01-27 02:08:57"
           const rowDate = row.date.split(' ')[0]; // Take only the date part
           return rowDate === formattedDate;
@@ -300,7 +312,11 @@ export default function SheetComparison() {
     return results;
   };
 
-  const updateSheet = async (index: number, field: keyof SheetProfile, value: string) => {
+  const updateSheet = async (
+    index: number,
+    field: keyof SheetProfile,
+    value: string | FilterConfig[]
+  ) => {
     try {
       const updatedProfiles = [...profiles];
       const profile = { ...updatedProfiles[index], [field]: value };
@@ -523,6 +539,88 @@ export default function SheetComparison() {
                           value={profile.dateColumn}
                           onChange={(e) => updateSheet(index, 'dateColumn', e.target.value)}
                         />
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="font-medium">Filters</span>
+                            <button
+                              onClick={() => {
+                                const updatedProfile = {
+                                  ...profile,
+                                  filters: [...(profile.filters || []), {
+                                    column: 1,
+                                    value: '',
+                                    operator: 'contains' as const
+                                  }]
+                                };
+                                updateSheet(index, 'filters', updatedProfile.filters);
+                              }}
+                              className="text-blue-600 hover:text-blue-800 text-sm"
+                            >
+                              Add Filter
+                            </button>
+                          </div>
+                          {profile.filters?.map((filter, filterIndex) => (
+                            <div key={filterIndex} className="flex space-x-2">
+                              <input
+                                type="number"
+                                placeholder="Column"
+                                className="w-20 p-2 border rounded"
+                                value={filter.column}
+                                onChange={(e) => {
+                                  const updatedFilters = [...(profile.filters || [])];
+                                  updatedFilters[filterIndex] = {
+                                    ...filter,
+                                    column: parseInt(e.target.value) || 1
+                                  };
+                                  updateSheet(index, 'filters', updatedFilters);
+                                }}
+                              />
+                              <select
+                                className="p-2 border rounded"
+                                value={filter.operator}
+                                onChange={(e) => {
+                                  const updatedFilters = [...(profile.filters || [])];
+                                  updatedFilters[filterIndex] = {
+                                    ...filter,
+                                    operator: e.target.value as FilterConfig['operator']
+                                  };
+                                  updateSheet(index, 'filters', updatedFilters);
+                                }}
+                              >
+                                <option value="contains">Contains</option>
+                                <option value="equals">Equals</option>
+                                <option value="startsWith">Starts with</option>
+                                <option value="endsWith">Ends with</option>
+                              </select>
+                              <input
+                                type="text"
+                                placeholder="Value"
+                                className="flex-1 p-2 border rounded"
+                                value={filter.value}
+                                onChange={(e) => {
+                                  const updatedFilters = [...(profile.filters || [])];
+                                  updatedFilters[filterIndex] = {
+                                    ...filter,
+                                    value: e.target.value
+                                  };
+                                  updateSheet(index, 'filters', updatedFilters);
+                                }}
+                              />
+                              <button
+                                onClick={() => {
+                                  const updatedFilters = [...(profile.filters || [])];
+                                  updatedFilters.splice(filterIndex, 1);
+                                  updateSheet(index, 'filters', updatedFilters);
+                                }}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     {/* Save/Cancel Buttons */}
