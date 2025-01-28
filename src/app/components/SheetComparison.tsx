@@ -423,16 +423,16 @@ export default function SheetComparison() {
     }
   };
 
-  // Add a sorting function
+  // Update the sorting function
   const getSortedProfiles = (profiles: SheetProfile[]) => {
     return [...profiles].sort((a, b) => {
       if (sortBy === 'magnitude') {
         const deltaA = calculateDelta(entryCounts, a.name);
         const deltaB = calculateDelta(entryCounts, b.name);
         
-        // Use absolute value for magnitude sorting
-        const magnitudeA = Math.abs(deltaA?.percentageChange || 0);
-        const magnitudeB = Math.abs(deltaB?.percentageChange || 0);
+        // Use absolute value of the change (not percentage)
+        const magnitudeA = Math.abs(deltaA?.change || 0);
+        const magnitudeB = Math.abs(deltaB?.change || 0);
         
         return magnitudeB - magnitudeA; // Sort by highest magnitude first
       } else {
@@ -766,7 +766,7 @@ export default function SheetComparison() {
                               <ArrowTrendingDownIcon className="h-4 w-4" />
                             ) : null}
                             <span>
-                              {delta.change > 0 ? '+' : ''}{delta.change}
+                              {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
                             </span>
                           </div>
                         )}
