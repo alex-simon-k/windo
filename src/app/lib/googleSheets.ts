@@ -5,13 +5,23 @@ import { SheetProfile } from './firebase/profilesDB';
 
 // Function to properly format the private key
 const formatPrivateKey = (key: string): string => {
-  const formattedKey = key
-    .replace(/\\n/g, '\n')
-    .replace(/"/g, '')
-    .trim();
+  // Remove any extra quotes and spaces
+  let formattedKey = key.trim();
   
-  if (!formattedKey.startsWith('-----BEGIN PRIVATE KEY-----')) {
-    throw new Error('Invalid private key format');
+  // Remove wrapping quotes if they exist
+  if (formattedKey.startsWith('"') && formattedKey.endsWith('"')) {
+    formattedKey = formattedKey.slice(1, -1);
+  }
+  
+  // Replace literal \n with actual newlines
+  formattedKey = formattedKey.replace(/\\n/g, '\n');
+  
+  // Ensure the key has the correct header and footer
+  if (!formattedKey.includes('-----BEGIN PRIVATE KEY-----')) {
+    throw new Error('Invalid private key format: missing header');
+  }
+  if (!formattedKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('Invalid private key format: missing footer');
   }
   
   return formattedKey;

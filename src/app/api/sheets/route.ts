@@ -37,6 +37,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Log the private key format (but not the actual key)
+    console.log('Private key validation:', {
+      length: process.env.GOOGLE_PRIVATE_KEY.length,
+      hasHeader: process.env.GOOGLE_PRIVATE_KEY.includes('-----BEGIN PRIVATE KEY-----'),
+      hasFooter: process.env.GOOGLE_PRIVATE_KEY.includes('-----END PRIVATE KEY-----'),
+      hasNewlines: process.env.GOOGLE_PRIVATE_KEY.includes('\\n'),
+    });
+
     try {
       const dateColumnIndex = dateColumn ? parseInt(dateColumn) - 1 : 0;
       const data = await fetchSheetData(spreadsheetId, range, dateColumnIndex, filters);
