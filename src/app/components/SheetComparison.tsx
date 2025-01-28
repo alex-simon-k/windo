@@ -327,39 +327,34 @@ export default function SheetComparison() {
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
-      // Create a deep copy of the profiles array
-      const updatedProfiles = JSON.parse(JSON.stringify(profiles));
-      
-      // Create a new profile object with the updated field
-      const updatedProfile = {
-        ...updatedProfiles[index],
-        [field]: value
-      };
+      // Create a new array with the updated profile
+      const updatedProfiles = profiles.map((profile, i) => {
+        if (i === index) {
+          return {
+            ...profile,
+            [field]: value
+          };
+        }
+        return profile;
+      });
 
+      // Update state immediately for responsive UI
+      setProfiles(updatedProfiles);
+      
       // Log the update for debugging
-      console.log('Updating profile:', {
+      console.log('Profile updated:', {
         field,
         oldValue: profiles[index][field],
         newValue: value,
         profileBefore: profiles[index],
-        profileAfter: updatedProfile
+        profileAfter: updatedProfiles[index]
       });
-
-      // Update the profile in the array
-      updatedProfiles[index] = updatedProfile;
-
-      // Update state with the new array
-      setProfiles(updatedProfiles);
-      
-      // If we're in edit mode, we don't want to save to Firebase immediately
-      // The save will happen when the user clicks the Save button
     } catch (err) {
       console.error('Error updating profile:', err);
       setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
-  // Add a function to handle input changes with debouncing
   const handleInputChange = (
     index: number,
     field: keyof SheetProfile,
@@ -368,12 +363,8 @@ export default function SheetComparison() {
     // Clear any previous errors
     setError(null);
     
-    try {
-      updateSheet(index, field, value);
-    } catch (err) {
-      console.error('Error handling input change:', err);
-      setError('Failed to update field: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
+    // Update immediately without debouncing for better responsiveness
+    updateSheet(index, field, value);
   };
 
   const calculateDelta = (entryCounts: EntryCount[], sheetName: string): DeltaChange | null => {
