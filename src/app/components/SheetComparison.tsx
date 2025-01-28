@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SheetData } from '@/app/lib/googleSheets';
 import { format, subDays, parseISO } from 'date-fns';
-import { profilesDB, SheetProfile } from '@/app/lib/firebase/profilesDB';
+import { profilesDB, SheetProfile, FilterConfig, FilterGroup } from '@/app/lib/firebase/profilesDB';
 import { PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline';
 
@@ -40,12 +40,6 @@ interface DeltaChange {
   yesterday: number;
   change: number;
   percentageChange: number;
-}
-
-interface FilterConfig {
-  column: number;
-  value: string;
-  operator: 'equals' | 'contains' | 'startsWith' | 'endsWith';
 }
 
 export default function SheetComparison() {
@@ -154,11 +148,11 @@ export default function SheetComparison() {
         range: profile.range,
         dateColumn: profile.dateColumn,
         name: profile.name,
-        filters: profile.filters || [] // Include filters in the update
+        filterGroups: profile.filterGroups || [] // Include filterGroups in the update
       });
       setIsEditing(null);
       await loadProfiles(); // Reload to get updated data
-      // Run analysis with new filters
+      // Run analysis with new filterGroups
       await runAnalysis(profile);
     } catch (err) {
       setError('Failed to save profile');
@@ -206,8 +200,8 @@ export default function SheetComparison() {
         });
 
         // Add filters if they exist
-        if (sheet.filters && sheet.filters.length > 0) {
-          queryParams.append('filters', JSON.stringify(sheet.filters));
+        if (sheet.filterGroups && sheet.filterGroups.length > 0) {
+          queryParams.append('filterGroups', JSON.stringify(sheet.filterGroups));
         }
 
         const response = await fetch(`/api/sheets?${queryParams.toString()}`);
@@ -329,7 +323,7 @@ export default function SheetComparison() {
   const updateSheet = async (
     index: number,
     field: keyof SheetProfile,
-    value: string | FilterConfig[]
+    value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
       const updatedProfiles = [...profiles];
@@ -556,83 +550,138 @@ export default function SheetComparison() {
                         />
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
-                            <span className="font-medium">Filters</span>
+                            <span className="font-medium">Filter Groups</span>
                             <button
                               onClick={() => {
                                 const updatedProfile = {
                                   ...profile,
-                                  filters: [...(profile.filters || []), {
-                                    column: 1,
-                                    value: '',
-                                    operator: 'contains' as const
+                                  filterGroups: [...(profile.filterGroups || []), {
+                                    filters: [{
+                                      column: 1,
+                                      value: '',
+                                      operator: 'contains' as const
+                                    }],
+                                    logicalOperator: 'AND' as const
                                   }]
                                 };
-                                updateSheet(index, 'filters', updatedProfile.filters);
+                                updateSheet(index, 'filterGroups', updatedProfile.filterGroups);
                               }}
                               className="text-blue-600 hover:text-blue-800 text-sm"
                             >
-                              Add Filter
+                              Add Filter Group
                             </button>
                           </div>
-                          {profile.filters?.map((filter, filterIndex) => (
-                            <div key={filterIndex} className="flex space-x-2">
-                              <input
-                                type="number"
-                                placeholder="Column"
-                                className="w-20 p-2 border rounded"
-                                value={filter.column}
-                                onChange={(e) => {
-                                  const updatedFilters = [...(profile.filters || [])];
-                                  updatedFilters[filterIndex] = {
-                                    ...filter,
-                                    column: parseInt(e.target.value) || 1
-                                  };
-                                  updateSheet(index, 'filters', updatedFilters);
-                                }}
-                              />
-                              <select
-                                className="p-2 border rounded"
-                                value={filter.operator}
-                                onChange={(e) => {
-                                  const updatedFilters = [...(profile.filters || [])];
-                                  updatedFilters[filterIndex] = {
-                                    ...filter,
-                                    operator: e.target.value as FilterConfig['operator']
-                                  };
-                                  updateSheet(index, 'filters', updatedFilters);
-                                }}
-                              >
-                                <option value="contains">Contains</option>
-                                <option value="equals">Equals</option>
-                                <option value="startsWith">Starts with</option>
-                                <option value="endsWith">Ends with</option>
-                              </select>
-                              <input
-                                type="text"
-                                placeholder="Value"
-                                className="flex-1 p-2 border rounded"
-                                value={filter.value}
-                                onChange={(e) => {
-                                  const updatedFilters = [...(profile.filters || [])];
-                                  updatedFilters[filterIndex] = {
-                                    ...filter,
-                                    value: e.target.value
-                                  };
-                                  updateSheet(index, 'filters', updatedFilters);
-                                }}
-                              />
-                              <button
-                                onClick={() => {
-                                  const updatedFilters = [...(profile.filters || [])];
-                                  updatedFilters.splice(filterIndex, 1);
-                                  updateSheet(index, 'filters', updatedFilters);
-                                }}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
+                          {profile.filterGroups?.map((group, groupIndex) => (
+                            <div key={groupIndex} className="border rounded p-2 space-y-2">
+                              <div className="flex justify-between items-center">
+                                <select
+                                  className="p-1 border rounded text-sm"
+                                  value={group.logicalOperator}
+                                  onChange={(e) => {
+                                    const updatedGroups = [...(profile.filterGroups || [])];
+                                    updatedGroups[groupIndex] = {
+                                      ...group,
+                                      logicalOperator: e.target.value as 'AND' | 'OR'
+                                    };
+                                    updateSheet(index, 'filterGroups', updatedGroups);
+                                  }}
+                                >
+                                  <option value="AND">AND</option>
+                                  <option value="OR">OR</option>
+                                </select>
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex].filters.push({
+                                        column: 1,
+                                        value: '',
+                                        operator: 'contains'
+                                      });
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 text-xs"
+                                  >
+                                    Add Condition
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups.splice(groupIndex, 1);
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              </div>
+                              {group.filters.map((filter, filterIndex) => (
+                                <div key={filterIndex} className="flex space-x-2">
+                                  <input
+                                    type="number"
+                                    placeholder="Column"
+                                    className="w-20 p-2 border rounded"
+                                    value={filter.column}
+                                    onChange={(e) => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex].filters[filterIndex] = {
+                                        ...filter,
+                                        column: parseInt(e.target.value) || 1
+                                      };
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                  />
+                                  <select
+                                    className="p-2 border rounded"
+                                    value={filter.operator}
+                                    onChange={(e) => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex].filters[filterIndex] = {
+                                        ...filter,
+                                        operator: e.target.value as FilterConfig['operator']
+                                      };
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                  >
+                                    <option value="contains">Contains</option>
+                                    <option value="equals">Equals</option>
+                                    <option value="startsWith">Starts with</option>
+                                    <option value="endsWith">Ends with</option>
+                                  </select>
+                                  <input
+                                    type="text"
+                                    placeholder="Value"
+                                    className="flex-1 p-2 border rounded"
+                                    value={filter.value}
+                                    onChange={(e) => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex].filters[filterIndex] = {
+                                        ...filter,
+                                        value: e.target.value
+                                      };
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      const updatedGroups = [...(profile.filterGroups || [])];
+                                      updatedGroups[groupIndex].filters.splice(filterIndex, 1);
+                                      if (updatedGroups[groupIndex].filters.length === 0) {
+                                        updatedGroups.splice(groupIndex, 1);
+                                      }
+                                      updateSheet(index, 'filterGroups', updatedGroups);
+                                    }}
+                                    className="text-red-600 hover:text-red-800"
+                                  >
+                                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              ))}
                             </div>
                           ))}
                         </div>

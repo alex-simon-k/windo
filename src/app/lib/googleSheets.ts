@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import { GaxiosError } from 'gaxios';
-import { SheetProfile } from './firebase/profilesDB';
+import { SheetProfile, FilterConfig, FilterGroup } from './firebase/profilesDB';
 
 // Function to properly format the private key
 const formatPrivateKey = (key: string): string => {
@@ -57,24 +57,39 @@ export interface SheetData {
   matchesFilters: boolean;
 }
 
-const applyFilters = (row: string[], filters?: SheetProfile['filters']): boolean => {
-  if (!filters || filters.length === 0) return true;
+const applyFilters = (row: string[], filterGroups?: SheetProfile['filterGroups']): boolean => {
+  if (!filterGroups || filterGroups.length === 0) return true;
 
-  return filters.every(filter => {
-    const value = row[filter.column - 1] || '';
-    switch (filter.operator) {
-      case 'equals':
-        return value.toLowerCase() === filter.value.toLowerCase();
-      case 'contains':
-        return value.toLowerCase().includes(filter.value.toLowerCase());
-      case 'startsWith':
-        return value.toLowerCase().startsWith(filter.value.toLowerCase());
-      case 'endsWith':
-        return value.toLowerCase().endsWith(filter.value.toLowerCase());
-      default:
-        return true;
+  // Each group is connected with AND by default
+  return filterGroups.every(group => {
+    // Within each group, filters are connected with the specified logical operator
+    if (group.logicalOperator === 'AND') {
+      return group.filters.every(filter => {
+        const value = row[filter.column - 1] || '';
+        return applyFilter(value, filter);
+      });
+    } else { // OR
+      return group.filters.some(filter => {
+        const value = row[filter.column - 1] || '';
+        return applyFilter(value, filter);
+      });
     }
   });
+};
+
+const applyFilter = (value: string, filter: FilterConfig): boolean => {
+  switch (filter.operator) {
+    case 'equals':
+      return value.toLowerCase() === filter.value.toLowerCase();
+    case 'contains':
+      return value.toLowerCase().includes(filter.value.toLowerCase());
+    case 'startsWith':
+      return value.toLowerCase().startsWith(filter.value.toLowerCase());
+    case 'endsWith':
+      return value.toLowerCase().endsWith(filter.value.toLowerCase());
+    default:
+      return true;
+  }
 };
 
 export const fetchSheetData = async (

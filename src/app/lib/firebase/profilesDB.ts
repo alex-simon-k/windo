@@ -10,20 +10,27 @@ import {
   setDoc 
 } from 'firebase/firestore';
 
+export interface FilterConfig {
+  column: number;
+  value: string;
+  operator: 'equals' | 'contains' | 'startsWith' | 'endsWith';
+}
+
+export interface FilterGroup {
+  filters: FilterConfig[];
+  logicalOperator: 'AND' | 'OR';
+}
+
 export interface SheetProfile {
+  docId?: string;
   id: string;
   range: string;
   dateColumn: string;
   name: string;
   lastRun?: string;
+  filterGroups?: FilterGroup[];
   createdAt: string;
   updatedAt: string;
-  docId: string; // Firestore document ID
-  filters?: {
-    column: number;
-    value: string;
-    operator: 'equals' | 'contains' | 'startsWith' | 'endsWith';
-  }[];
 }
 
 interface AnalyticsData {
