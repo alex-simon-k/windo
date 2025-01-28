@@ -1,9 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetData } from '@/app/lib/googleSheets';
 
-export async function GET(request: Request) {
+export const dynamic = 'force-dynamic'; // This is important for dynamic API routes
+
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
+    const searchParams = request.nextUrl.searchParams;
     const spreadsheetId = searchParams.get('spreadsheetId');
     const range = searchParams.get('range');
     const dateColumn = searchParams.get('dateColumn');
