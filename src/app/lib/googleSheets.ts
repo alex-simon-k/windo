@@ -14,33 +14,52 @@ const formatPrivateKey = (key: string): string => {
       formattedKey = formattedKey.slice(1, -1);
     }
 
-    // If the key doesn't have proper line breaks, add them
-    if (!formattedKey.includes('\n')) {
-      formattedKey = formattedKey
-        .replace(/\\n/g, '\n') // Replace literal \n with actual newlines
-        .replace(/\s+/g, '\n') // Replace any remaining whitespace with newlines
-        .trim(); // Remove any leading/trailing whitespace
+    // Replace literal \n with actual newlines
+    formattedKey = formattedKey.replace(/\\n/g, '\n');
+
+    // Split into lines and clean each line
+    const lines = formattedKey
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    // Validate and ensure proper structure
+    const keyLines = [];
+    let inKey = false;
+
+    for (const line of lines) {
+      if (line.includes('BEGIN PRIVATE KEY')) {
+        keyLines.push('-----BEGIN PRIVATE KEY-----');
+        inKey = true;
+      } else if (line.includes('END PRIVATE KEY')) {
+        keyLines.push('-----END PRIVATE KEY-----');
+        inKey = false;
+      } else if (inKey && line.length > 0) {
+        // Only include lines between BEGIN and END markers
+        // Ensure each line is valid base64
+        if (/^[A-Za-z0-9+/=]+$/.test(line)) {
+          keyLines.push(line);
+        }
+      }
     }
 
-    // Ensure the key has the correct format
-    const lines = formattedKey.split('\n').map(line => line.trim()).filter(Boolean);
-    
-    if (!lines[0]?.includes('-----BEGIN PRIVATE KEY-----')) {
-      lines.unshift('-----BEGIN PRIVATE KEY-----');
+    // Ensure we have a valid key structure
+    if (!keyLines[0]?.includes('BEGIN PRIVATE KEY')) {
+      keyLines.unshift('-----BEGIN PRIVATE KEY-----');
     }
-    
-    if (!lines[lines.length - 1]?.includes('-----END PRIVATE KEY-----')) {
-      lines.push('-----END PRIVATE KEY-----');
+    if (!keyLines[keyLines.length - 1]?.includes('END PRIVATE KEY')) {
+      keyLines.push('-----END PRIVATE KEY-----');
     }
 
-    // Filter out any duplicate headers/footers in the middle
-    const filteredLines = lines.filter((line, index) => {
-      if (index === 0 || index === lines.length - 1) return true;
-      return !line.includes('PRIVATE KEY');
+    // Log key structure (without exposing the actual key)
+    console.log('Key structure validation:', {
+      totalLines: keyLines.length,
+      hasHeader: keyLines[0] === '-----BEGIN PRIVATE KEY-----',
+      hasFooter: keyLines[keyLines.length - 1] === '-----END PRIVATE KEY-----',
+      middleLinesLength: keyLines.slice(1, -1).map(line => line.length),
     });
 
-    // Join with newlines and ensure proper spacing
-    return filteredLines.join('\n');
+    return keyLines.join('\n');
   } catch (error) {
     console.error('Error formatting private key:', error);
     throw new Error(
@@ -60,17 +79,18 @@ const initializeGoogleSheets = async () => {
     // Format the private key properly
     const privateKey = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
     
-    // Log key format details for debugging (without exposing the actual key)
-    console.log('Private key validation:', {
-      length: privateKey.length,
-      hasHeader: privateKey.includes('-----BEGIN PRIVATE KEY-----'),
-      hasFooter: privateKey.includes('-----END PRIVATE KEY-----'),
-      lineCount: privateKey.split('\n').length,
-      firstLine: privateKey.split('\n')[0],
-      lastLine: privateKey.split('\n').slice(-1)[0],
-      containsNewlines: privateKey.includes('\n'),
-    });
-    
+    // Additional validation
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----') || 
+        !privateKey.includes('-----END PRIVATE KEY-----')) {
+      throw new Error('Invalid private key format: missing required markers');
+    }
+
+    const keyParts = privateKey.split('\n');
+    if (keyParts.length < 3) {
+      throw new Error('Invalid private key format: insufficient key data');
+    }
+
+    // Create the client
     const client = new JWT({
       email: process.env.GOOGLE_CLIENT_EMAIL,
       key: privateKey,
