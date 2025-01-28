@@ -327,6 +327,11 @@ export default function SheetComparison() {
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
     try {
+      // Check if the value is actually different before updating
+      if (JSON.stringify(profiles[index][field]) === JSON.stringify(value)) {
+        return; // Skip update if value hasn't changed
+      }
+
       // Create a new array with the updated profile
       const updatedProfiles = profiles.map((profile, i) => {
         if (i === index) {
@@ -353,16 +358,16 @@ export default function SheetComparison() {
           name: updatedProfile.name,
           filterGroups: updatedProfile.filterGroups || []
         });
+
+        // Log the update for debugging
+        console.log('Profile updated:', {
+          field,
+          oldValue: profiles[index][field],
+          newValue: value,
+          profileBefore: profiles[index],
+          profileAfter: updatedProfile
+        });
       }
-      
-      // Log the update for debugging
-      console.log('Profile updated:', {
-        field,
-        oldValue: profiles[index][field],
-        newValue: value,
-        profileBefore: profiles[index],
-        profileAfter: updatedProfiles[index]
-      });
     } catch (err) {
       console.error('Error updating profile:', err);
       setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
@@ -377,8 +382,13 @@ export default function SheetComparison() {
     // Clear any previous errors
     setError(null);
     
-    // Update immediately
-    updateSheet(index, field, value);
+    // Debounce the update to prevent rapid-fire updates
+    const timeoutId = setTimeout(() => {
+      updateSheet(index, field, value);
+    }, 300); // Wait 300ms before updating
+
+    // Cleanup timeout on next render
+    return () => clearTimeout(timeoutId);
   };
 
   const calculateDelta = (entryCounts: EntryCount[], sheetName: string): DeltaChange | null => {
