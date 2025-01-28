@@ -153,10 +153,13 @@ export default function SheetComparison() {
         id: profile.id,
         range: profile.range,
         dateColumn: profile.dateColumn,
-        name: profile.name
+        name: profile.name,
+        filters: profile.filters || [] // Include filters in the update
       });
       setIsEditing(null);
       await loadProfiles(); // Reload to get updated data
+      // Run analysis with new filters
+      await runAnalysis(profile);
     } catch (err) {
       setError('Failed to save profile');
       console.error(err);
@@ -177,6 +180,7 @@ export default function SheetComparison() {
 
   const runAnalysis = async (profile: SheetProfile) => {
     try {
+      console.log('Running analysis with profile:', profile);
       await profilesDB.update(profile.docId!, {
         lastRun: new Date().toISOString()
       });
@@ -194,9 +198,19 @@ export default function SheetComparison() {
     
     try {
       for (const sheet of sheetsToAnalyze) {
-        const response = await fetch(
-          `/api/sheets?spreadsheetId=${sheet.id}&range=${sheet.range}&dateColumn=${sheet.dateColumn}`
-        );
+        // Include filters in the API request
+        const queryParams = new URLSearchParams({
+          spreadsheetId: sheet.id,
+          range: sheet.range,
+          dateColumn: sheet.dateColumn
+        });
+
+        // Add filters if they exist
+        if (sheet.filters && sheet.filters.length > 0) {
+          queryParams.append('filters', JSON.stringify(sheet.filters));
+        }
+
+        const response = await fetch(`/api/sheets?${queryParams.toString()}`);
         
         if (!response.ok) {
           const errorData = await response.json();
@@ -320,6 +334,7 @@ export default function SheetComparison() {
     try {
       const updatedProfiles = [...profiles];
       const profile = { ...updatedProfiles[index], [field]: value };
+      console.log('Updating profile with:', { field, value, profile });
       updatedProfiles[index] = profile;
       setProfiles(updatedProfiles);
       
