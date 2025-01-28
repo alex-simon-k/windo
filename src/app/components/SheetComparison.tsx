@@ -338,8 +338,22 @@ export default function SheetComparison() {
         return profile;
       });
 
+      // Get the updated profile
+      const updatedProfile = updatedProfiles[index];
+
       // Update state immediately for responsive UI
       setProfiles(updatedProfiles);
+      
+      // Persist to Firebase if we have a docId
+      if (updatedProfile.docId) {
+        await profilesDB.update(updatedProfile.docId, {
+          id: updatedProfile.id,
+          range: updatedProfile.range,
+          dateColumn: updatedProfile.dateColumn,
+          name: updatedProfile.name,
+          filterGroups: updatedProfile.filterGroups || []
+        });
+      }
       
       // Log the update for debugging
       console.log('Profile updated:', {
@@ -363,7 +377,7 @@ export default function SheetComparison() {
     // Clear any previous errors
     setError(null);
     
-    // Update immediately without debouncing for better responsiveness
+    // Update immediately
     updateSheet(index, field, value);
   };
 
