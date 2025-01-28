@@ -13,32 +13,34 @@ const formatPrivateKey = (key: string): string => {
     if (formattedKey.startsWith('"') && formattedKey.endsWith('"')) {
       formattedKey = formattedKey.slice(1, -1);
     }
-    
-    // Normalize newlines
-    formattedKey = formattedKey
-      .replace(/\\n/g, '\n') // Replace literal \n with actual newlines
-      .replace(/\r\n/g, '\n') // Replace Windows line endings
-      .replace(/\r/g, '\n'); // Replace any remaining carriage returns
-    
-    // Ensure proper spacing and format
+
+    // If the key doesn't have proper line breaks, add them
+    if (!formattedKey.includes('\n')) {
+      formattedKey = formattedKey
+        .replace(/\\n/g, '\n') // Replace literal \n with actual newlines
+        .replace(/\s+/g, '\n') // Replace any remaining whitespace with newlines
+        .trim(); // Remove any leading/trailing whitespace
+    }
+
+    // Ensure the key has the correct format
     const lines = formattedKey.split('\n').map(line => line.trim()).filter(Boolean);
     
-    // Check for header and footer
     if (!lines[0]?.includes('-----BEGIN PRIVATE KEY-----')) {
-      throw new Error('Invalid private key format: missing header');
-    }
-    if (!lines[lines.length - 1]?.includes('-----END PRIVATE KEY-----')) {
-      throw new Error('Invalid private key format: missing footer');
+      lines.unshift('-----BEGIN PRIVATE KEY-----');
     }
     
-    // Reconstruct the key with proper formatting
-    return [
-      '-----BEGIN PRIVATE KEY-----',
-      ...lines
-        .slice(1, -1) // Get all lines except header and footer
-        .filter(line => line && !line.includes('PRIVATE KEY')), // Remove any duplicate headers/footers
-      '-----END PRIVATE KEY-----'
-    ].join('\n');
+    if (!lines[lines.length - 1]?.includes('-----END PRIVATE KEY-----')) {
+      lines.push('-----END PRIVATE KEY-----');
+    }
+
+    // Filter out any duplicate headers/footers in the middle
+    const filteredLines = lines.filter((line, index) => {
+      if (index === 0 || index === lines.length - 1) return true;
+      return !line.includes('PRIVATE KEY');
+    });
+
+    // Join with newlines and ensure proper spacing
+    return filteredLines.join('\n');
   } catch (error) {
     console.error('Error formatting private key:', error);
     throw new Error(
@@ -58,11 +60,15 @@ const initializeGoogleSheets = async () => {
     // Format the private key properly
     const privateKey = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
     
+    // Log key format details for debugging (without exposing the actual key)
     console.log('Private key validation:', {
       length: privateKey.length,
       hasHeader: privateKey.includes('-----BEGIN PRIVATE KEY-----'),
       hasFooter: privateKey.includes('-----END PRIVATE KEY-----'),
       lineCount: privateKey.split('\n').length,
+      firstLine: privateKey.split('\n')[0],
+      lastLine: privateKey.split('\n').slice(-1)[0],
+      containsNewlines: privateKey.includes('\n'),
     });
     
     const client = new JWT({
