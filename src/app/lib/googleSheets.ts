@@ -2,6 +2,20 @@ import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 import { GaxiosError } from 'gaxios';
 
+// Function to properly format the private key
+const formatPrivateKey = (key: string): string => {
+  const formattedKey = key
+    .replace(/\\n/g, '\n')
+    .replace(/"/g, '')
+    .trim();
+  
+  if (!formattedKey.startsWith('-----BEGIN PRIVATE KEY-----')) {
+    throw new Error('Invalid private key format');
+  }
+  
+  return formattedKey;
+};
+
 // Initialize Google Sheets client
 const initializeGoogleSheets = async () => {
   if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
@@ -9,8 +23,8 @@ const initializeGoogleSheets = async () => {
   }
 
   try {
-    // Clean up the private key - replace literal \n with actual newlines
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+    // Format the private key properly
+    const privateKey = formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY);
     
     const client = new JWT({
       email: process.env.GOOGLE_CLIENT_EMAIL,
