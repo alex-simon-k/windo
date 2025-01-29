@@ -377,10 +377,16 @@ export default function SheetComparison() {
     field: keyof SheetProfile,
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
-    console.log('Input change:', { index, field, value });
-
     // Get the current profile
     const currentProfile = profiles[index];
+    
+    // Check if the value is actually different
+    if (JSON.stringify(currentProfile[field]) === JSON.stringify(value)) {
+      console.log('Value unchanged, skipping update');
+      return;
+    }
+
+    console.log('Input change:', { index, field, value });
     
     // Create the updated profile
     const updatedProfile = {
@@ -398,24 +404,35 @@ export default function SheetComparison() {
     updatedProfiles[index] = updatedProfile;
     setProfiles(updatedProfiles);
 
-    // Save to Firebase
+    // Clear any existing timeout
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    // Save to Firebase with debouncing
     if (updatedProfile.docId) {
-      console.log('Saving to Firebase:', {
+      console.log('Scheduling Firebase update:', {
         docId: updatedProfile.docId,
         field,
         value
       });
 
-      profilesDB.update(updatedProfile.docId, {
-        [field]: value
-      }).then(() => {
-        console.log('Successfully saved to Firebase');
-      }).catch(err => {
-        console.error('Error saving to Firebase:', err);
-        setError('Failed to save changes');
-        // Revert on error
-        setProfiles([...profiles]);
-      });
+      debounceTimerRef.current = setTimeout(() => {
+        console.log('Executing Firebase update');
+        profilesDB.update(updatedProfile.docId!, {
+          [field]: value
+        }).then(() => {
+          console.log('Successfully saved to Firebase:', {
+            field,
+            value
+          });
+        }).catch(err => {
+          console.error('Error saving to Firebase:', err);
+          setError('Failed to save changes');
+          // Revert on error
+          setProfiles([...profiles]);
+        });
+      }, 500); // 500ms debounce
     }
   };
 
@@ -667,7 +684,7 @@ export default function SheetComparison() {
                             onChange={(e) => {
                               const value = e.target.value;
                               const numValue = parseInt(value);
-                              if (numValue > 0) {
+                              if (numValue > 0 && value !== profile.dateColumn) {
                                 handleInputChange(index, 'dateColumn', value);
                               }
                             }}
@@ -678,7 +695,9 @@ export default function SheetComparison() {
                                 const newValue = e.key === 'ArrowUp' 
                                   ? currentValue + 1 
                                   : Math.max(1, currentValue - 1);
-                                handleInputChange(index, 'dateColumn', newValue.toString());
+                                if (newValue.toString() !== profile.dateColumn) {
+                                  handleInputChange(index, 'dateColumn', newValue.toString());
+                                }
                               }
                             }}
                             min="1"
