@@ -409,63 +409,65 @@ export default function SheetComparison() {
   const handleNumberInput = (
     index: number,
     field: keyof SheetProfile,
-    event: React.ChangeEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    const input = event.currentTarget;
-    let newValue = input.value;
-
-    // Handle arrow keys
-    if ('key' in event) {
-      const currentValue = parseInt(profiles[index][field] as string) || 0;
-      if (event.key === 'ArrowUp') {
-        event.preventDefault(); // Prevent default to avoid double increment
-        newValue = (currentValue + 1).toString();
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault(); // Prevent default to avoid double decrement
-        newValue = Math.max(1, currentValue - 1).toString();
-      } else {
-        return; // Not an arrow key, exit
-      }
-      
-      // Update the input value directly for immediate feedback
-      input.value = newValue;
-    }
-
-    // Ensure value is a positive number
+    // Get the new value from the input
+    const newValue = event.target.value;
+    
+    // Ensure it's a valid positive number
     const numValue = parseInt(newValue);
-    if (numValue > 0) {
-      // Get current profile
-      const currentProfile = profiles[index];
-      
-      // Create updated profile
-      const updatedProfile = {
-        ...currentProfile,
+    if (numValue < 1) return;
+
+    // Update the profile directly
+    const updatedProfiles = [...profiles];
+    updatedProfiles[index] = {
+      ...updatedProfiles[index],
+      [field]: newValue
+    };
+
+    // Update state immediately
+    setProfiles(updatedProfiles);
+
+    // Save to Firebase
+    const profile = updatedProfiles[index];
+    if (profile.docId) {
+      profilesDB.update(profile.docId, {
         [field]: newValue
-      };
+      });
+    }
+  };
 
-      // Update local state immediately
-      const updatedProfiles = [...profiles];
-      updatedProfiles[index] = updatedProfile;
-      setProfiles(updatedProfiles);
+  // Separate handler for arrow keys
+  const handleArrowKeys = (
+    index: number,
+    field: keyof SheetProfile,
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) => {
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+    
+    event.preventDefault();
+    
+    const currentValue = parseInt(profiles[index][field] as string) || 1;
+    const newValue = event.key === 'ArrowUp' 
+      ? currentValue + 1 
+      : Math.max(1, currentValue - 1);
 
-      // Save to Firebase
-      if (updatedProfile.docId) {
-        console.log('Updating profile:', {
-          field,
-          oldValue: currentProfile[field],
-          newValue,
-          profileId: updatedProfile.docId
-        });
+    // Update the profile directly
+    const updatedProfiles = [...profiles];
+    updatedProfiles[index] = {
+      ...updatedProfiles[index],
+      [field]: newValue.toString()
+    };
 
-        profilesDB.update(updatedProfile.docId, {
-          [field]: newValue
-        }).catch(err => {
-          console.error('Error saving to Firebase:', err);
-          setError('Failed to save changes');
-          // Revert on error
-          setProfiles([...profiles]);
-        });
-      }
+    // Update state immediately
+    setProfiles(updatedProfiles);
+
+    // Save to Firebase
+    const profile = updatedProfiles[index];
+    if (profile.docId) {
+      profilesDB.update(profile.docId, {
+        [field]: newValue.toString()
+      });
     }
   };
 
@@ -715,7 +717,7 @@ export default function SheetComparison() {
                             className="w-full p-2 border rounded text-black"
                             value={profile.dateColumn}
                             onChange={(e) => handleNumberInput(index, 'dateColumn', e)}
-                            onKeyDown={(e) => handleNumberInput(index, 'dateColumn', e)}
+                            onKeyDown={(e) => handleArrowKeys(index, 'dateColumn', e)}
                             min="1"
                             step="1"
                           />
