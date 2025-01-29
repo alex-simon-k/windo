@@ -964,6 +964,7 @@ export default function SheetComparison() {
                               <label className="text-sm font-medium text-gray-700">Analysis Column</label>
                               <span className="text-xs text-gray-500">Used to track changes in specific entries</span>
                             </div>
+                            {/* eslint-disable-next-line react/no-unescaped-entities */}
                             <div className="text-xs text-gray-500 mb-2">
                               This column will be used to analyze what entries have been added or removed between yesterday and today.
                               For example, if you&apos;re tracking opportunities, this would be the column containing opportunity IDs.
