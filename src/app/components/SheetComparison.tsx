@@ -86,35 +86,59 @@ function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnCha
         </div>
         
         <div className="space-y-4">
-          <div className="text-sm text-gray-600">
-            Comparing changes in column {changes.column} between {changes.date1} and {changes.date2}
+          <div className="text-sm text-gray-600 space-y-1">
+            <div>Analyzing changes in column {changes.column}</div>
+            <div className="text-xs">
+              Comparing entries between:
+              <div className="font-mono mt-1">
+                Yesterday: {changes.date1}
+                <br />
+                Today: {changes.date2}
+              </div>
+            </div>
           </div>
           
-          {changes.added.length > 0 && (
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <h4 className="font-medium text-green-600">Added Entries ({changes.added.length})</h4>
+              <h4 className="font-medium text-green-600 flex items-center space-x-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>New Entries ({changes.added.length})</span>
+              </h4>
               <div className="bg-green-50 p-3 rounded-lg">
-                <ul className="list-disc list-inside space-y-1">
-                  {changes.added.map((entry, index) => (
-                    <li key={index} className="text-green-800">{entry}</li>
-                  ))}
-                </ul>
+                {changes.added.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {changes.added.map((entry, index) => (
+                      <li key={index} className="text-green-800">{entry}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No new entries</p>
+                )}
               </div>
             </div>
-          )}
-          
-          {changes.removed.length > 0 && (
+            
             <div className="space-y-2">
-              <h4 className="font-medium text-red-600">Removed Entries ({changes.removed.length})</h4>
+              <h4 className="font-medium text-red-600 flex items-center space-x-2">
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                </svg>
+                <span>Removed Entries ({changes.removed.length})</span>
+              </h4>
               <div className="bg-red-50 p-3 rounded-lg">
-                <ul className="list-disc list-inside space-y-1">
-                  {changes.removed.map((entry, index) => (
-                    <li key={index} className="text-red-800">{entry}</li>
-                  ))}
-                </ul>
+                {changes.removed.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {changes.removed.map((entry, index) => (
+                      <li key={index} className="text-red-800">{entry}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500 italic">No removed entries</p>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
     </div>
@@ -728,20 +752,43 @@ export default function SheetComparison() {
     date2: string
   ): ColumnChange | undefined => {
     try {
-      // Get entries for both days
+      // Get entries for both days, ensuring we only look at filtered data
       const day1Entries = sheetData
-        .filter(row => row.date.split(' ')[0] === date1 && row.matchesFilters)
+        .filter(row => {
+          const rowDate = row.date.split(' ')[0];
+          return rowDate === date1 && row.matchesFilters;
+        })
         .map(row => row.values[columnIndex - 1]?.trim())
         .filter(Boolean);
 
       const day2Entries = sheetData
-        .filter(row => row.date.split(' ')[0] === date2 && row.matchesFilters)
+        .filter(row => {
+          const rowDate = row.date.split(' ')[0];
+          return rowDate === date2 && row.matchesFilters;
+        })
         .map(row => row.values[columnIndex - 1]?.trim())
         .filter(Boolean);
 
-      // Find added and removed entries
+      console.log('Analyzing changes:', {
+        date1,
+        date2,
+        day1EntriesCount: day1Entries.length,
+        day2EntriesCount: day2Entries.length,
+        columnIndex
+      });
+
+      // Find added entries (in day2 but not in day1)
       const added = day2Entries.filter(entry => !day1Entries.includes(entry));
+      
+      // Find removed entries (in day1 but not in day2)
       const removed = day1Entries.filter(entry => !day2Entries.includes(entry));
+
+      console.log('Changes found:', {
+        addedCount: added.length,
+        removedCount: removed.length,
+        added,
+        removed
+      });
 
       if (added.length === 0 && removed.length === 0) return undefined;
 
