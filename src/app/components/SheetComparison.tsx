@@ -331,21 +331,33 @@ export default function SheetComparison() {
       // Get the current profile
       const currentProfile = profiles[index];
       
-      // Check if the value is actually different
-      const currentValue = currentProfile[field];
-      const isValueDifferent = typeof value === 'string' 
-        ? value !== currentValue 
-        : JSON.stringify(value) !== JSON.stringify(currentValue);
+      // For number inputs, convert both values to numbers for comparison
+      let isValueDifferent = false;
+      if (field === 'dateColumn') {
+        const currentNum = parseInt(currentProfile[field] as string) || 0;
+        const newNum = parseInt(value as string) || 0;
+        isValueDifferent = currentNum !== newNum;
+        console.log('Comparing numbers:', { currentNum, newNum, isValueDifferent });
+      } else {
+        // For other fields, use string or deep comparison
+        isValueDifferent = typeof value === 'string' 
+          ? value !== currentProfile[field] 
+          : JSON.stringify(value) !== JSON.stringify(currentProfile[field]);
+      }
 
       if (!isValueDifferent) {
-        console.log('Value unchanged, skipping update:', { field, value });
+        console.log('Value unchanged, skipping update:', { 
+          field, 
+          currentValue: currentProfile[field], 
+          newValue: value 
+        });
         return;
       }
 
       console.log('Updating profile:', { 
         index, 
         field, 
-        oldValue: currentValue,
+        oldValue: currentProfile[field],
         newValue: value 
       });
 
@@ -362,6 +374,12 @@ export default function SheetComparison() {
 
       // Save to Firebase
       if (updatedProfile.docId) {
+        console.log('Saving to Firebase:', {
+          docId: updatedProfile.docId,
+          field,
+          value
+        });
+
         profilesDB.update(updatedProfile.docId, {
           [field]: value
         }).then(() => {
@@ -373,7 +391,7 @@ export default function SheetComparison() {
           console.error('Error saving to Firebase:', err);
           setError('Failed to save changes');
           // Revert on error
-          setProfiles([...profiles]);
+          setProfiles(profiles);
         });
       }
     } catch (err) {
@@ -631,6 +649,7 @@ export default function SheetComparison() {
                               const value = e.target.value;
                               const numValue = parseInt(value);
                               if (numValue > 0) {
+                                console.log('Number input change:', { value, numValue });
                                 handleProfileUpdate(index, 'dateColumn', value);
                               }
                             }}
@@ -641,6 +660,7 @@ export default function SheetComparison() {
                                 const newValue = e.key === 'ArrowUp' 
                                   ? currentValue + 1 
                                   : Math.max(1, currentValue - 1);
+                                console.log('Arrow key press:', { currentValue, newValue });
                                 handleProfileUpdate(index, 'dateColumn', newValue.toString());
                               }
                             }}
