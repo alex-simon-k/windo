@@ -377,7 +377,8 @@ export default function SheetComparison() {
         range: editingProfile.range,
         dateColumn: editingProfile.dateColumn,
         name: editingProfile.name,
-        filterGroups: editingProfile.filterGroups || []
+        filterGroups: editingProfile.filterGroups || [],
+        analysisColumn: editingProfile.analysisColumn
       });
 
       // Update the profiles list
@@ -927,31 +928,72 @@ export default function SheetComparison() {
                             value={editingProfile.range}
                             onChange={(e) => handleEditChange('range', e.target.value)}
                           />
-                          <input
-                            type="number"
-                            placeholder="Date Column Number"
-                            className="w-full p-2 border rounded text-black"
-                            value={editingProfile.dateColumn}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              const numValue = parseInt(value);
-                              if (numValue > 0) {
-                                handleEditChange('dateColumn', value);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                e.preventDefault();
-                                const currentValue = parseInt(editingProfile.dateColumn) || 1;
-                                const newValue = e.key === 'ArrowUp' 
-                                  ? currentValue + 1 
-                                  : Math.max(1, currentValue - 1);
-                                handleEditChange('dateColumn', newValue.toString());
-                              }
-                            }}
-                            min="1"
-                            step="1"
-                          />
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-700">Date Column</label>
+                              <span className="text-xs text-gray-500">Used to group entries by date</span>
+                            </div>
+                            <input
+                              type="number"
+                              placeholder="Date Column Number"
+                              className="w-full p-2 border rounded text-black"
+                              value={editingProfile.dateColumn}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const numValue = parseInt(value);
+                                if (numValue > 0) {
+                                  handleEditChange('dateColumn', value);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  const currentValue = parseInt(editingProfile.dateColumn) || 1;
+                                  const newValue = e.key === 'ArrowUp' 
+                                    ? currentValue + 1 
+                                    : Math.max(1, currentValue - 1);
+                                  handleEditChange('dateColumn', newValue.toString());
+                                }
+                              }}
+                              min="1"
+                              step="1"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-700">Analysis Column</label>
+                              <span className="text-xs text-gray-500">Used to track changes in specific entries</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mb-2">
+                              This column will be used to analyze what entries have been added or removed between yesterday and today.
+                              For example, if you're tracking opportunities, this would be the column containing opportunity IDs.
+                            </div>
+                            <input
+                              type="number"
+                              placeholder="Analysis Column Number"
+                              className="w-full p-2 border rounded text-black"
+                              value={editingProfile.analysisColumn || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const numValue = parseInt(value);
+                                if (numValue > 0) {
+                                  handleEditChange('analysisColumn', value);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  const currentValue = parseInt(editingProfile.analysisColumn || '1') || 1;
+                                  const newValue = e.key === 'ArrowUp' 
+                                    ? currentValue + 1 
+                                    : Math.max(1, currentValue - 1);
+                                  handleEditChange('analysisColumn', newValue.toString());
+                                }
+                              }}
+                              min="1"
+                              step="1"
+                            />
+                          </div>
                           <div className="mt-4">
                             <FilterEditor
                               filterGroups={editingProfile.filterGroups || []}
@@ -1002,10 +1044,10 @@ export default function SheetComparison() {
                                 {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
                               </span>
                             </div>
-                            {profile.dateColumn && delta.change !== 0 && (
+                            {profile.analysisColumn && delta.change !== 0 && (
                               <button
                                 onClick={() => {
-                                  const columnNum = parseInt(profile.dateColumn);
+                                  const columnNum = parseInt(profile.analysisColumn);
                                   if (columnNum > 0) {
                                     const sheetData = sheetDataMap[profile.name];
                                     if (sheetData) {

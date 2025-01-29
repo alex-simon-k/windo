@@ -29,8 +29,9 @@ export interface SheetProfile {
   name: string;
   lastRun?: string;
   filterGroups?: FilterGroup[];
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  analysisColumn?: string;
 }
 
 interface AnalyticsData {
