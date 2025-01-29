@@ -1048,7 +1048,7 @@ export default function SheetComparison() {
                             {profile.analysisColumn && delta.change !== 0 && (
                               <button
                                 onClick={() => {
-                                  const columnNum = parseInt(profile.analysisColumn);
+                                  const columnNum = parseInt(profile.analysisColumn || '0');
                                   if (columnNum > 0) {
                                     const sheetData = sheetDataMap[profile.name];
                                     if (sheetData) {
@@ -1133,7 +1133,7 @@ export default function SheetComparison() {
         isOpen={selectedChanges !== null}
         onClose={() => setSelectedChanges(null)}
         changes={selectedChanges?.changes}
-        profileName={selectedChanges?.profileName || ''}
+        profileName={selectedChanges?.profileName ?? ''}
       />
     </div>
   );
