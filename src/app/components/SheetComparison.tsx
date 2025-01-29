@@ -42,6 +42,80 @@ interface DeltaChange {
   percentageChange: number;
 }
 
+interface ColumnChange {
+  added: string[];
+  removed: string[];
+  column: number;
+  date1: string;
+  date2: string;
+}
+
+interface DeltaDetails {
+  change: DeltaChange;
+  columnChanges?: ColumnChange;
+}
+
+interface ColumnChangesModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  changes: ColumnChange | undefined;
+  profileName: string;
+}
+
+function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnChangesModalProps) {
+  if (!isOpen || !changes) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Changes for {profileName}</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600">
+            Comparing changes in column {changes.column} between {changes.date1} and {changes.date2}
+          </div>
+          
+          {changes.added.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-green-600">Added Entries ({changes.added.length})</h4>
+              <div className="bg-green-50 p-3 rounded-lg">
+                <ul className="list-disc list-inside space-y-1">
+                  {changes.added.map((entry, index) => (
+                    <li key={index} className="text-green-800">{entry}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+          
+          {changes.removed.length > 0 && (
+            <div className="space-y-2">
+              <h4 className="font-medium text-red-600">Removed Entries ({changes.removed.length})</h4>
+              <div className="bg-red-50 p-3 rounded-lg">
+                <ul className="list-disc list-inside space-y-1">
+                  {changes.removed.map((entry, index) => (
+                    <li key={index} className="text-red-800">{entry}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SheetComparison() {
   const [profiles, setProfiles] = useState<SheetProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +131,11 @@ export default function SheetComparison() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'magnitude' | 'name'>('magnitude');
   const [editingProfile, setEditingProfile] = useState<SheetProfile | null>(null);
+  const [sheetDataMap, setSheetDataMap] = useState<Record<string, SheetData[]>>({});
+  const [selectedChanges, setSelectedChanges] = useState<{
+    changes: ColumnChange | undefined;
+    profileName: string;
+  } | null>(null);
 
   // Load profiles and analytics on mount
   useEffect(() => {
@@ -252,6 +331,13 @@ export default function SheetComparison() {
         }
         
         const sheetData = await response.json();
+        
+        // Store the sheet data
+        setSheetDataMap(prev => ({
+          ...prev,
+          [sheet.name]: sheetData
+        }));
+
         const sheetComparisons = compareData(
           sheetData.filter((row: SheetData) => row.matchesFilters),
           sheet.name
@@ -514,6 +600,75 @@ export default function SheetComparison() {
     }
   };
 
+  const analyzeColumnChanges = (
+    sheetData: SheetData[], 
+    columnIndex: number,
+    date1: string,
+    date2: string
+  ): ColumnChange | undefined => {
+    try {
+      // Get entries for both days
+      const day1Entries = sheetData
+        .filter(row => row.date.split(' ')[0] === date1 && row.matchesFilters)
+        .map(row => row.values[columnIndex - 1]?.trim())
+        .filter(Boolean);
+
+      const day2Entries = sheetData
+        .filter(row => row.date.split(' ')[0] === date2 && row.matchesFilters)
+        .map(row => row.values[columnIndex - 1]?.trim())
+        .filter(Boolean);
+
+      // Find added and removed entries
+      const added = day2Entries.filter(entry => !day1Entries.includes(entry));
+      const removed = day1Entries.filter(entry => !day2Entries.includes(entry));
+
+      if (added.length === 0 && removed.length === 0) return undefined;
+
+      return {
+        added,
+        removed,
+        column: columnIndex,
+        date1,
+        date2
+      };
+    } catch (err) {
+      console.error('Error analyzing column changes:', err);
+      return undefined;
+    }
+  };
+
+  const getDeltaDetails = (
+    entryCounts: EntryCount[], 
+    sheetName: string,
+    sheetData: SheetData[],
+    columnToAnalyze?: number
+  ): DeltaDetails | null => {
+    const delta = calculateDelta(entryCounts, sheetName);
+    if (!delta) return null;
+
+    // If there's no column to analyze or no change, just return the delta
+    if (!columnToAnalyze || delta.change === 0) return { change: delta };
+
+    // Get the dates we need to compare
+    const sortedEntries = entryCounts
+      .filter(entry => entry.sheetName === sheetName)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    if (sortedEntries.length < 2) return { change: delta };
+
+    const columnChanges = analyzeColumnChanges(
+      sheetData,
+      columnToAnalyze,
+      sortedEntries[1].date, // yesterday
+      sortedEntries[0].date  // today
+    );
+
+    return {
+      change: delta,
+      columnChanges
+    };
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
@@ -708,18 +863,48 @@ export default function SheetComparison() {
                       </div>
                       <div className="col-span-2 text-center">
                         {delta && (
-                          <div className={`flex items-center justify-center space-x-1
-                            ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
-                          >
-                            {delta.change > 0 ? (
-                              <ArrowTrendingUpIcon className="h-4 w-4" />
-                            ) : delta.change < 0 ? (
-                              <ArrowTrendingDownIcon className="h-4 w-4" />
-                            ) : null}
-                            <span>
-                              {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
-                            </span>
-                          </div>
+                          <>
+                            <div className={`flex items-center justify-center space-x-1
+                              ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
+                            >
+                              {delta.change > 0 ? (
+                                <ArrowTrendingUpIcon className="h-4 w-4" />
+                              ) : delta.change < 0 ? (
+                                <ArrowTrendingDownIcon className="h-4 w-4" />
+                              ) : null}
+                              <span>
+                                {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
+                              </span>
+                            </div>
+                            {profile.dateColumn && delta.change !== 0 && (
+                              <button
+                                onClick={() => {
+                                  const columnNum = parseInt(profile.dateColumn);
+                                  if (columnNum > 0) {
+                                    const sheetData = sheetDataMap[profile.name];
+                                    if (sheetData) {
+                                      console.log('Analyzing column changes for column:', columnNum);
+                                      const details = getDeltaDetails(entryCounts, profile.name, sheetData, columnNum);
+                                      if (details?.columnChanges) {
+                                        console.log('Column changes:', details.columnChanges);
+                                        setSelectedChanges({
+                                          changes: details.columnChanges,
+                                          profileName: profile.name
+                                        });
+                                      } else {
+                                        alert('No specific changes found in the selected column.');
+                                      }
+                                    } else {
+                                      alert('Please refresh the data to view changes.');
+                                    }
+                                  }
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                              >
+                                View Changes
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                       <div className="col-span-3 text-center font-mono">
@@ -774,6 +959,13 @@ export default function SheetComparison() {
           </div>
         )}
       </div>
+
+      <ColumnChangesModal
+        isOpen={selectedChanges !== null}
+        onClose={() => setSelectedChanges(null)}
+        changes={selectedChanges?.changes}
+        profileName={selectedChanges?.profileName || ''}
+      />
     </div>
   );
 } 
