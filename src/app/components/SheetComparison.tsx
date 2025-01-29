@@ -501,6 +501,59 @@ export default function SheetComparison() {
     });
   };
 
+  const handleNumberChange = (
+    index: number,
+    value: string,
+    isArrowKey: boolean = false
+  ) => {
+    try {
+      // Get the current profile
+      const currentProfile = profiles[index];
+      
+      // Parse the numbers
+      const newNum = parseInt(value);
+      if (newNum < 1) return;
+
+      console.log('Handling number change:', { 
+        currentValue: currentProfile.dateColumn, 
+        newValue: value,
+        isArrowKey 
+      });
+
+      // Create the updated profile
+      const updatedProfile = {
+        ...currentProfile,
+        dateColumn: value
+      };
+
+      // Update state immediately
+      const updatedProfiles = [...profiles];
+      updatedProfiles[index] = updatedProfile;
+      setProfiles(updatedProfiles);
+
+      // Save to Firebase
+      if (updatedProfile.docId) {
+        console.log('Saving to Firebase:', {
+          docId: updatedProfile.docId,
+          value
+        });
+
+        profilesDB.update(updatedProfile.docId, {
+          dateColumn: value
+        }).then(() => {
+          console.log('Successfully saved to Firebase:', { value });
+        }).catch(err => {
+          console.error('Error saving to Firebase:', err);
+          setError('Failed to save changes');
+          setProfiles(profiles);
+        });
+      }
+    } catch (err) {
+      console.error('Error updating number:', err);
+      setError('Failed to update number: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
@@ -647,10 +700,8 @@ export default function SheetComparison() {
                             value={profile.dateColumn}
                             onChange={(e) => {
                               const value = e.target.value;
-                              const numValue = parseInt(value);
-                              if (numValue > 0) {
-                                console.log('Number input change:', { value, numValue });
-                                handleProfileUpdate(index, 'dateColumn', value);
+                              if (value) {
+                                handleNumberChange(index, value);
                               }
                             }}
                             onKeyDown={(e) => {
@@ -660,8 +711,7 @@ export default function SheetComparison() {
                                 const newValue = e.key === 'ArrowUp' 
                                   ? currentValue + 1 
                                   : Math.max(1, currentValue - 1);
-                                console.log('Arrow key press:', { currentValue, newValue });
-                                handleProfileUpdate(index, 'dateColumn', newValue.toString());
+                                handleNumberChange(index, newValue.toString(), true);
                               }
                             }}
                             min="1"
