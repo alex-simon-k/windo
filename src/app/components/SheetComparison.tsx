@@ -377,8 +377,7 @@ export default function SheetComparison() {
     field: keyof SheetProfile,
     value: string | FilterConfig[] | FilterGroup[]
   ) => {
-    // Clear any previous errors
-    setError(null);
+    console.log('Input change:', { index, field, value });
 
     // Get the current profile
     const currentProfile = profiles[index];
@@ -389,84 +388,33 @@ export default function SheetComparison() {
       [field]: value
     };
 
+    console.log('Updating profile:', {
+      before: currentProfile,
+      after: updatedProfile
+    });
+
     // Update state immediately
     const updatedProfiles = [...profiles];
     updatedProfiles[index] = updatedProfile;
     setProfiles(updatedProfiles);
 
-    // Save to Firebase immediately if it's a simple field update
-    if (typeof value === 'string' && updatedProfile.docId) {
+    // Save to Firebase
+    if (updatedProfile.docId) {
+      console.log('Saving to Firebase:', {
+        docId: updatedProfile.docId,
+        field,
+        value
+      });
+
       profilesDB.update(updatedProfile.docId, {
-        ...updatedProfile,
-        filterGroups: updatedProfile.filterGroups || []
+        [field]: value
+      }).then(() => {
+        console.log('Successfully saved to Firebase');
       }).catch(err => {
         console.error('Error saving to Firebase:', err);
         setError('Failed to save changes');
-      });
-    }
-  };
-
-  const handleNumberInput = (
-    index: number,
-    field: keyof SheetProfile,
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    // Get the new value from the input
-    const newValue = event.target.value;
-    
-    // Ensure it's a valid positive number
-    const numValue = parseInt(newValue);
-    if (numValue < 1) return;
-
-    // Update the profile directly
-    const updatedProfiles = [...profiles];
-    updatedProfiles[index] = {
-      ...updatedProfiles[index],
-      [field]: newValue
-    };
-
-    // Update state immediately
-    setProfiles(updatedProfiles);
-
-    // Save to Firebase
-    const profile = updatedProfiles[index];
-    if (profile.docId) {
-      profilesDB.update(profile.docId, {
-        [field]: newValue
-      });
-    }
-  };
-
-  // Separate handler for arrow keys
-  const handleArrowKeys = (
-    index: number,
-    field: keyof SheetProfile,
-    event: React.KeyboardEvent<HTMLInputElement>
-  ) => {
-    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-    
-    event.preventDefault();
-    
-    const currentValue = parseInt(profiles[index][field] as string) || 1;
-    const newValue = event.key === 'ArrowUp' 
-      ? currentValue + 1 
-      : Math.max(1, currentValue - 1);
-
-    // Update the profile directly
-    const updatedProfiles = [...profiles];
-    updatedProfiles[index] = {
-      ...updatedProfiles[index],
-      [field]: newValue.toString()
-    };
-
-    // Update state immediately
-    setProfiles(updatedProfiles);
-
-    // Save to Firebase
-    const profile = updatedProfiles[index];
-    if (profile.docId) {
-      profilesDB.update(profile.docId, {
-        [field]: newValue.toString()
+        // Revert on error
+        setProfiles([...profiles]);
       });
     }
   };
@@ -716,8 +664,23 @@ export default function SheetComparison() {
                             placeholder="Date Column Number"
                             className="w-full p-2 border rounded text-black"
                             value={profile.dateColumn}
-                            onChange={(e) => handleNumberInput(index, 'dateColumn', e)}
-                            onKeyDown={(e) => handleArrowKeys(index, 'dateColumn', e)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const numValue = parseInt(value);
+                              if (numValue > 0) {
+                                handleInputChange(index, 'dateColumn', value);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                const currentValue = parseInt(profile.dateColumn) || 1;
+                                const newValue = e.key === 'ArrowUp' 
+                                  ? currentValue + 1 
+                                  : Math.max(1, currentValue - 1);
+                                handleInputChange(index, 'dateColumn', newValue.toString());
+                              }
+                            }}
                             min="1"
                             step="1"
                           />
