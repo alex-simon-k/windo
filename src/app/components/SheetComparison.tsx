@@ -322,7 +322,7 @@ export default function SheetComparison() {
     return results;
   };
 
-  const updateSheet = async (
+  const handleProfileUpdate = (
     index: number,
     field: keyof SheetProfile,
     value: string | FilterConfig[] | FilterGroup[]
@@ -331,95 +331,38 @@ export default function SheetComparison() {
       // Get the current profile
       const currentProfile = profiles[index];
       
+      // Check if the value is actually different
+      const currentValue = currentProfile[field];
+      const isValueDifferent = typeof value === 'string' 
+        ? value !== currentValue 
+        : JSON.stringify(value) !== JSON.stringify(currentValue);
+
+      if (!isValueDifferent) {
+        console.log('Value unchanged, skipping update:', { field, value });
+        return;
+      }
+
+      console.log('Updating profile:', { 
+        index, 
+        field, 
+        oldValue: currentValue,
+        newValue: value 
+      });
+
       // Create the updated profile
       const updatedProfile = {
         ...currentProfile,
         [field]: value
       };
 
-      // Update state immediately for responsive UI
+      // Update state immediately
       const updatedProfiles = [...profiles];
       updatedProfiles[index] = updatedProfile;
       setProfiles(updatedProfiles);
-      
-      // Persist to Firebase if we have a docId
+
+      // Save to Firebase
       if (updatedProfile.docId) {
-        const profileData = {
-          id: updatedProfile.id,
-          range: updatedProfile.range,
-          dateColumn: updatedProfile.dateColumn,
-          name: updatedProfile.name,
-          filterGroups: updatedProfile.filterGroups || []
-        };
-
-        await profilesDB.update(updatedProfile.docId, profileData);
-
-        // Log the update with full details
-        console.log('Profile updated:', {
-          field,
-          oldValue: currentProfile[field],
-          newValue: value,
-          profileBefore: currentProfile,
-          profileAfter: updatedProfile,
-          profileData
-        });
-      }
-    } catch (err) {
-      console.error('Error updating profile:', err);
-      setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
-      // Revert the state on error
-      setProfiles([...profiles]);
-    }
-  };
-
-  const handleInputChange = (
-    index: number,
-    field: keyof SheetProfile,
-    value: string | FilterConfig[] | FilterGroup[]
-  ) => {
-    // Get the current profile
-    const currentProfile = profiles[index];
-    
-    // Check if the value is actually different
-    if (JSON.stringify(currentProfile[field]) === JSON.stringify(value)) {
-      console.log('Value unchanged, skipping update');
-      return;
-    }
-
-    console.log('Input change:', { index, field, value });
-    
-    // Create the updated profile
-    const updatedProfile = {
-      ...currentProfile,
-      [field]: value
-    };
-
-    console.log('Updating profile:', {
-      before: currentProfile,
-      after: updatedProfile
-    });
-
-    // Update state immediately
-    const updatedProfiles = [...profiles];
-    updatedProfiles[index] = updatedProfile;
-    setProfiles(updatedProfiles);
-
-    // Clear any existing timeout
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    // Save to Firebase with debouncing
-    if (updatedProfile.docId) {
-      console.log('Scheduling Firebase update:', {
-        docId: updatedProfile.docId,
-        field,
-        value
-      });
-
-      debounceTimerRef.current = setTimeout(() => {
-        console.log('Executing Firebase update');
-        profilesDB.update(updatedProfile.docId!, {
+        profilesDB.update(updatedProfile.docId, {
           [field]: value
         }).then(() => {
           console.log('Successfully saved to Firebase:', {
@@ -432,7 +375,10 @@ export default function SheetComparison() {
           // Revert on error
           setProfiles([...profiles]);
         });
-      }, 500); // 500ms debounce
+      }
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -660,21 +606,21 @@ export default function SheetComparison() {
                             placeholder="Profile Name"
                             className="w-full p-2 border rounded text-black"
                             value={profile.name}
-                            onChange={(e) => handleInputChange(index, 'name', e.target.value)}
+                            onChange={(e) => handleProfileUpdate(index, 'name', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Spreadsheet ID"
                             className="w-full p-2 border rounded text-black"
                             value={profile.id}
-                            onChange={(e) => handleInputChange(index, 'id', e.target.value)}
+                            onChange={(e) => handleProfileUpdate(index, 'id', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Sheet Range (e.g., Sheet1!A2:Z1000)"
                             className="w-full p-2 border rounded text-black"
                             value={profile.range}
-                            onChange={(e) => handleInputChange(index, 'range', e.target.value)}
+                            onChange={(e) => handleProfileUpdate(index, 'range', e.target.value)}
                           />
                           <input
                             type="number"
@@ -684,8 +630,8 @@ export default function SheetComparison() {
                             onChange={(e) => {
                               const value = e.target.value;
                               const numValue = parseInt(value);
-                              if (numValue > 0 && value !== profile.dateColumn) {
-                                handleInputChange(index, 'dateColumn', value);
+                              if (numValue > 0) {
+                                handleProfileUpdate(index, 'dateColumn', value);
                               }
                             }}
                             onKeyDown={(e) => {
@@ -695,9 +641,7 @@ export default function SheetComparison() {
                                 const newValue = e.key === 'ArrowUp' 
                                   ? currentValue + 1 
                                   : Math.max(1, currentValue - 1);
-                                if (newValue.toString() !== profile.dateColumn) {
-                                  handleInputChange(index, 'dateColumn', newValue.toString());
-                                }
+                                handleProfileUpdate(index, 'dateColumn', newValue.toString());
                               }
                             }}
                             min="1"
@@ -719,7 +663,7 @@ export default function SheetComparison() {
                                       logicalOperator: 'AND' as const
                                     }]
                                   };
-                                  handleInputChange(index, 'filterGroups', updatedProfile.filterGroups);
+                                  handleProfileUpdate(index, 'filterGroups', updatedProfile.filterGroups);
                                 }}
                                 className="text-blue-600 hover:text-blue-800 text-sm"
                               >
@@ -738,7 +682,7 @@ export default function SheetComparison() {
                                         ...group,
                                         logicalOperator: e.target.value as 'AND' | 'OR'
                                       };
-                                      handleInputChange(index, 'filterGroups', updatedGroups);
+                                      handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                     }}
                                   >
                                     <option value="AND">AND</option>
@@ -753,7 +697,7 @@ export default function SheetComparison() {
                                           value: '',
                                           operator: 'contains'
                                         });
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-blue-600 hover:text-blue-800 text-xs"
                                     >
@@ -763,7 +707,7 @@ export default function SheetComparison() {
                                       onClick={() => {
                                         const updatedGroups = [...(profile.filterGroups || [])];
                                         updatedGroups.splice(groupIndex, 1);
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-red-600 hover:text-red-800"
                                     >
@@ -786,7 +730,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           column: parseInt(e.target.value) || 1
                                         };
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                     />
                                     <select
@@ -798,7 +742,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           operator: e.target.value as FilterConfig['operator']
                                         };
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                     >
                                       <option value="contains">Contains</option>
@@ -817,7 +761,7 @@ export default function SheetComparison() {
                                           ...filter,
                                           value: e.target.value
                                         };
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                     />
                                     <button
@@ -827,7 +771,7 @@ export default function SheetComparison() {
                                         if (updatedGroups[groupIndex].filters.length === 0) {
                                           updatedGroups.splice(groupIndex, 1);
                                         }
-                                        handleInputChange(index, 'filterGroups', updatedGroups);
+                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
                                       }}
                                       className="text-red-600 hover:text-red-800"
                                     >
