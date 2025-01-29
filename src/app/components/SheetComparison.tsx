@@ -56,6 +56,7 @@ export default function SheetComparison() {
   const debounceTimerRef = useRef<NodeJS.Timeout>();
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'magnitude' | 'name'>('magnitude');
+  const [editingProfile, setEditingProfile] = useState<SheetProfile | null>(null);
 
   // Load profiles and analytics on mount
   useEffect(() => {
@@ -143,22 +144,59 @@ export default function SheetComparison() {
     }
   };
 
+  const startEditing = (profile: SheetProfile) => {
+    setEditingProfile({ ...profile });
+    setIsEditing(profile.docId ?? null);
+  };
+
+  const cancelEditing = () => {
+    setEditingProfile(null);
+    setIsEditing(null);
+  };
+
+  const handleEditChange = (
+    field: keyof SheetProfile,
+    value: string | FilterConfig[] | FilterGroup[]
+  ) => {
+    if (!editingProfile) return;
+
+    console.log('Editing change:', { field, value });
+    setEditingProfile(prev => prev ? {
+      ...prev,
+      [field]: value
+    } : null);
+  };
+
   const saveProfile = async (profile: SheetProfile) => {
     try {
-      await profilesDB.update(profile.docId!, {
-        id: profile.id,
-        range: profile.range,
-        dateColumn: profile.dateColumn,
-        name: profile.name,
-        filterGroups: profile.filterGroups || [] // Include filterGroups in the update
+      if (!editingProfile || !profile.docId) return;
+
+      console.log('Saving profile:', editingProfile);
+
+      await profilesDB.update(profile.docId, {
+        id: editingProfile.id,
+        range: editingProfile.range,
+        dateColumn: editingProfile.dateColumn,
+        name: editingProfile.name,
+        filterGroups: editingProfile.filterGroups || []
       });
+
+      // Update the profiles list
+      setProfiles(prevProfiles => 
+        prevProfiles.map(p => 
+          p.docId === profile.docId ? editingProfile : p
+        )
+      );
+
+      // Clear editing state
+      setEditingProfile(null);
       setIsEditing(null);
-      await loadProfiles(); // Reload to get updated data
-      // Run analysis with new filterGroups
-      await runAnalysis(profile);
+
+      // Reload profiles to get fresh data
+      await loadProfiles();
     } catch (err) {
-      setError('Failed to save profile');
-      console.error(err);
+      console.error('Failed to save profile:', err);
+      setError('Failed to save profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
     }
   };
 
@@ -320,84 +358,6 @@ export default function SheetComparison() {
     }
 
     return results;
-  };
-
-  const handleProfileUpdate = (
-    index: number,
-    field: keyof SheetProfile,
-    value: string | FilterConfig[] | FilterGroup[]
-  ) => {
-    try {
-      // Get the current profile
-      const currentProfile = profiles[index];
-      
-      // For number inputs, convert both values to numbers for comparison
-      let isValueDifferent = false;
-      if (field === 'dateColumn') {
-        const currentNum = parseInt(currentProfile[field] as string) || 0;
-        const newNum = parseInt(value as string) || 0;
-        isValueDifferent = currentNum !== newNum;
-        console.log('Comparing numbers:', { currentNum, newNum, isValueDifferent });
-      } else {
-        // For other fields, use string or deep comparison
-        isValueDifferent = typeof value === 'string' 
-          ? value !== currentProfile[field] 
-          : JSON.stringify(value) !== JSON.stringify(currentProfile[field]);
-      }
-
-      if (!isValueDifferent) {
-        console.log('Value unchanged, skipping update:', { 
-          field, 
-          currentValue: currentProfile[field], 
-          newValue: value 
-        });
-        return;
-      }
-
-      console.log('Updating profile:', { 
-        index, 
-        field, 
-        oldValue: currentProfile[field],
-        newValue: value 
-      });
-
-      // Create the updated profile
-      const updatedProfile = {
-        ...currentProfile,
-        [field]: value
-      };
-
-      // Update state immediately
-      const updatedProfiles = [...profiles];
-      updatedProfiles[index] = updatedProfile;
-      setProfiles(updatedProfiles);
-
-      // Save to Firebase
-      if (updatedProfile.docId) {
-        console.log('Saving to Firebase:', {
-          docId: updatedProfile.docId,
-          field,
-          value
-        });
-
-        profilesDB.update(updatedProfile.docId, {
-          [field]: value
-        }).then(() => {
-          console.log('Successfully saved to Firebase:', {
-            field,
-            value
-          });
-        }).catch(err => {
-          console.error('Error saving to Firebase:', err);
-          setError('Failed to save changes');
-          // Revert on error
-          setProfiles(profiles);
-        });
-      }
-    } catch (err) {
-      console.error('Error updating profile:', err);
-      setError('Failed to update profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    }
   };
 
   const calculateDelta = (entryCounts: EntryCount[], sheetName: string): DeltaChange | null => {
@@ -654,10 +614,9 @@ export default function SheetComparison() {
                   key={profile.docId}
                   className="grid grid-cols-12 gap-4 px-4 py-2 bg-white hover:bg-gray-50 border-b items-center text-sm"
                 >
-                  {profile.docId === isEditing ? (
+                  {profile.docId === isEditing && editingProfile ? (
                     // Edit Mode
                     <>
-                      {/* Name Input */}
                       <div className="col-span-11">
                         <div className="space-y-2">
                           <div className="flex justify-between items-center mb-2">
@@ -676,187 +635,50 @@ export default function SheetComparison() {
                             type="text"
                             placeholder="Profile Name"
                             className="w-full p-2 border rounded text-black"
-                            value={profile.name}
-                            onChange={(e) => handleProfileUpdate(index, 'name', e.target.value)}
+                            value={editingProfile.name}
+                            onChange={(e) => handleEditChange('name', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Spreadsheet ID"
                             className="w-full p-2 border rounded text-black"
-                            value={profile.id}
-                            onChange={(e) => handleProfileUpdate(index, 'id', e.target.value)}
+                            value={editingProfile.id}
+                            onChange={(e) => handleEditChange('id', e.target.value)}
                           />
                           <input
                             type="text"
                             placeholder="Sheet Range (e.g., Sheet1!A2:Z1000)"
                             className="w-full p-2 border rounded text-black"
-                            value={profile.range}
-                            onChange={(e) => handleProfileUpdate(index, 'range', e.target.value)}
+                            value={editingProfile.range}
+                            onChange={(e) => handleEditChange('range', e.target.value)}
                           />
                           <input
                             type="number"
                             placeholder="Date Column Number"
                             className="w-full p-2 border rounded text-black"
-                            value={profile.dateColumn}
+                            value={editingProfile.dateColumn}
                             onChange={(e) => {
                               const value = e.target.value;
-                              if (value) {
-                                handleNumberChange(index, value);
+                              const numValue = parseInt(value);
+                              if (numValue > 0) {
+                                handleEditChange('dateColumn', value);
                               }
                             }}
                             onKeyDown={(e) => {
                               if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
                                 e.preventDefault();
-                                const currentValue = parseInt(profile.dateColumn) || 1;
+                                const currentValue = parseInt(editingProfile.dateColumn) || 1;
                                 const newValue = e.key === 'ArrowUp' 
                                   ? currentValue + 1 
                                   : Math.max(1, currentValue - 1);
-                                handleNumberChange(index, newValue.toString(), true);
+                                handleEditChange('dateColumn', newValue.toString());
                               }
                             }}
                             min="1"
                             step="1"
                           />
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                              <span className="font-medium">Filter Groups</span>
-                              <button
-                                onClick={() => {
-                                  const updatedProfile = {
-                                    ...profile,
-                                    filterGroups: [...(profile.filterGroups || []), {
-                                      filters: [{
-                                        column: 1,
-                                        value: '',
-                                        operator: 'contains' as const
-                                      }],
-                                      logicalOperator: 'AND' as const
-                                    }]
-                                  };
-                                  handleProfileUpdate(index, 'filterGroups', updatedProfile.filterGroups);
-                                }}
-                                className="text-blue-600 hover:text-blue-800 text-sm"
-                              >
-                                Add Filter Group
-                              </button>
-                            </div>
-                            {profile.filterGroups?.map((group, groupIndex) => (
-                              <div key={groupIndex} className="border rounded p-2 space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <select
-                                    className="p-1 border rounded text-sm"
-                                    value={group.logicalOperator}
-                                    onChange={(e) => {
-                                      const updatedGroups = [...(profile.filterGroups || [])];
-                                      updatedGroups[groupIndex] = {
-                                        ...group,
-                                        logicalOperator: e.target.value as 'AND' | 'OR'
-                                      };
-                                      handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                    }}
-                                  >
-                                    <option value="AND">AND</option>
-                                    <option value="OR">OR</option>
-                                  </select>
-                                  <div className="flex space-x-2">
-                                    <button
-                                      onClick={() => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups[groupIndex].filters.push({
-                                          column: 1,
-                                          value: '',
-                                          operator: 'contains'
-                                        });
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                      className="text-blue-600 hover:text-blue-800 text-xs"
-                                    >
-                                      Add Condition
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups.splice(groupIndex, 1);
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                      className="text-red-600 hover:text-red-800"
-                                    >
-                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </div>
-                                {group.filters.map((filter, filterIndex) => (
-                                  <div key={filterIndex} className="flex space-x-2">
-                                    <input
-                                      type="number"
-                                      placeholder="Column"
-                                      className="w-20 p-2 border rounded"
-                                      value={filter.column}
-                                      onChange={(e) => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups[groupIndex].filters[filterIndex] = {
-                                          ...filter,
-                                          column: parseInt(e.target.value) || 1
-                                        };
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                    />
-                                    <select
-                                      className="p-2 border rounded"
-                                      value={filter.operator}
-                                      onChange={(e) => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups[groupIndex].filters[filterIndex] = {
-                                          ...filter,
-                                          operator: e.target.value as FilterConfig['operator']
-                                        };
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                    >
-                                      <option value="contains">Contains</option>
-                                      <option value="equals">Equals</option>
-                                      <option value="startsWith">Starts with</option>
-                                      <option value="endsWith">Ends with</option>
-                                    </select>
-                                    <input
-                                      type="text"
-                                      placeholder="Value"
-                                      className="flex-1 p-2 border rounded"
-                                      value={filter.value}
-                                      onChange={(e) => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups[groupIndex].filters[filterIndex] = {
-                                          ...filter,
-                                          value: e.target.value
-                                        };
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                    />
-                                    <button
-                                      onClick={() => {
-                                        const updatedGroups = [...(profile.filterGroups || [])];
-                                        updatedGroups[groupIndex].filters.splice(filterIndex, 1);
-                                        if (updatedGroups[groupIndex].filters.length === 0) {
-                                          updatedGroups.splice(groupIndex, 1);
-                                        }
-                                        handleProfileUpdate(index, 'filterGroups', updatedGroups);
-                                      }}
-                                      className="text-red-600 hover:text-red-800"
-                                    >
-                                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            ))}
-                          </div>
                         </div>
                       </div>
-                      {/* Save/Cancel Buttons */}
                       <div className="col-span-1 flex justify-end space-x-2">
                         <button
                           onClick={() => saveProfile(profile)}
@@ -868,7 +690,7 @@ export default function SheetComparison() {
                           </svg>
                         </button>
                         <button
-                          onClick={() => setIsEditing(null)}
+                          onClick={cancelEditing}
                           className="text-gray-600 hover:text-gray-800"
                           title="Cancel"
                         >
@@ -908,7 +730,7 @@ export default function SheetComparison() {
                       </div>
                       <div className="col-span-1 flex justify-end space-x-2">
                         <button
-                          onClick={() => setIsEditing(profile.docId ?? null)}
+                          onClick={() => startEditing(profile)}
                           disabled={isRefreshing}
                           className={`text-blue-600 hover:text-blue-800 ${isRefreshing ? 'opacity-50' : ''}`}
                         >
