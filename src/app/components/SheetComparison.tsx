@@ -62,6 +62,11 @@ interface ColumnChangesModalProps {
   profileName: string;
 }
 
+interface FilterEditorProps {
+  filterGroups: FilterGroup[];
+  onChange: (filterGroups: FilterGroup[]) => void;
+}
+
 function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnChangesModalProps) {
   if (!isOpen || !changes) return null;
 
@@ -112,6 +117,121 @@ function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnCha
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function FilterEditor({ filterGroups, onChange }: FilterEditorProps) {
+  const addFilterGroup = () => {
+    onChange([...filterGroups, { filters: [], logicalOperator: 'AND' }]);
+  };
+
+  const addFilter = (groupIndex: number) => {
+    const newGroups = [...filterGroups];
+    newGroups[groupIndex].filters.push({
+      column: 1,
+      value: '',
+      operator: 'equals'
+    });
+    onChange(newGroups);
+  };
+
+  const updateFilter = (groupIndex: number, filterIndex: number, updates: Partial<FilterConfig>) => {
+    const newGroups = [...filterGroups];
+    newGroups[groupIndex].filters[filterIndex] = {
+      ...newGroups[groupIndex].filters[filterIndex],
+      ...updates
+    };
+    onChange(newGroups);
+  };
+
+  const removeFilter = (groupIndex: number, filterIndex: number) => {
+    const newGroups = [...filterGroups];
+    newGroups[groupIndex].filters.splice(filterIndex, 1);
+    if (newGroups[groupIndex].filters.length === 0) {
+      newGroups.splice(groupIndex, 1);
+    }
+    onChange(newGroups);
+  };
+
+  const updateGroupOperator = (groupIndex: number, operator: 'AND' | 'OR') => {
+    const newGroups = [...filterGroups];
+    newGroups[groupIndex].logicalOperator = operator;
+    onChange(newGroups);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="font-medium">Filters</h3>
+        <button
+          onClick={addFilterGroup}
+          className="text-blue-600 hover:text-blue-800 text-sm"
+        >
+          + Add Filter Group
+        </button>
+      </div>
+
+      {filterGroups.map((group, groupIndex) => (
+        <div key={groupIndex} className="border rounded-lg p-4 space-y-4">
+          <div className="flex justify-between items-center">
+            <select
+              value={group.logicalOperator}
+              onChange={(e) => updateGroupOperator(groupIndex, e.target.value as 'AND' | 'OR')}
+              className="text-sm border rounded p-1"
+            >
+              <option value="AND">Match ALL filters (AND)</option>
+              <option value="OR">Match ANY filter (OR)</option>
+            </select>
+            <button
+              onClick={() => addFilter(groupIndex)}
+              className="text-blue-600 hover:text-blue-800 text-sm"
+            >
+              + Add Filter
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {group.filters.map((filter, filterIndex) => (
+              <div key={filterIndex} className="flex items-center space-x-2">
+                <input
+                  type="number"
+                  value={filter.column}
+                  onChange={(e) => updateFilter(groupIndex, filterIndex, { column: parseInt(e.target.value) || 1 })}
+                  className="w-20 p-2 border rounded text-black"
+                  min="1"
+                  placeholder="Column"
+                />
+                <select
+                  value={filter.operator}
+                  onChange={(e) => updateFilter(groupIndex, filterIndex, { operator: e.target.value as FilterConfig['operator'] })}
+                  className="p-2 border rounded text-black"
+                >
+                  <option value="equals">Equals</option>
+                  <option value="contains">Contains</option>
+                  <option value="startsWith">Starts with</option>
+                  <option value="endsWith">Ends with</option>
+                </select>
+                <input
+                  type="text"
+                  value={filter.value}
+                  onChange={(e) => updateFilter(groupIndex, filterIndex, { value: e.target.value })}
+                  className="flex-1 p-2 border rounded text-black"
+                  placeholder="Value"
+                />
+                <button
+                  onClick={() => removeFilter(groupIndex, filterIndex)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -773,7 +893,7 @@ export default function SheetComparison() {
                     // Edit Mode
                     <>
                       <div className="col-span-11">
-                        <div className="space-y-2">
+                        <div className="space-y-4">
                           <div className="flex justify-between items-center mb-2">
                             <span className="font-medium">Edit Profile</span>
                             <button
@@ -832,6 +952,12 @@ export default function SheetComparison() {
                             min="1"
                             step="1"
                           />
+                          <div className="mt-4">
+                            <FilterEditor
+                              filterGroups={editingProfile.filterGroups || []}
+                              onChange={(filterGroups) => handleEditChange('filterGroups', filterGroups)}
+                            />
+                          </div>
                         </div>
                       </div>
                       <div className="col-span-1 flex justify-end space-x-2">
