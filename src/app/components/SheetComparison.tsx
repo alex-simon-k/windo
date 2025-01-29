@@ -966,7 +966,7 @@ export default function SheetComparison() {
                             </div>
                             <div className="text-xs text-gray-500 mb-2">
                               This column will be used to analyze what entries have been added or removed between yesterday and today.
-                              For example, if you're tracking opportunities, this would be the column containing opportunity IDs.
+                              For example, if you&apos;re tracking opportunities, this would be the column containing opportunity IDs.
                             </div>
                             <input
                               type="number"
