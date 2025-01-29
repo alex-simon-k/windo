@@ -412,24 +412,60 @@ export default function SheetComparison() {
     event: React.ChangeEvent<HTMLInputElement> | React.KeyboardEvent<HTMLInputElement>
   ) => {
     const input = event.currentTarget;
-    let value = input.value;
+    let newValue = input.value;
 
     // Handle arrow keys
     if ('key' in event) {
       const currentValue = parseInt(profiles[index][field] as string) || 0;
       if (event.key === 'ArrowUp') {
-        value = (currentValue + 1).toString();
+        event.preventDefault(); // Prevent default to avoid double increment
+        newValue = (currentValue + 1).toString();
       } else if (event.key === 'ArrowDown') {
-        value = (currentValue - 1).toString();
+        event.preventDefault(); // Prevent default to avoid double decrement
+        newValue = Math.max(1, currentValue - 1).toString();
       } else {
         return; // Not an arrow key, exit
       }
+      
+      // Update the input value directly for immediate feedback
+      input.value = newValue;
     }
 
     // Ensure value is a positive number
-    const numValue = parseInt(value);
+    const numValue = parseInt(newValue);
     if (numValue > 0) {
-      handleInputChange(index, field, numValue.toString());
+      // Get current profile
+      const currentProfile = profiles[index];
+      
+      // Create updated profile
+      const updatedProfile = {
+        ...currentProfile,
+        [field]: newValue
+      };
+
+      // Update local state immediately
+      const updatedProfiles = [...profiles];
+      updatedProfiles[index] = updatedProfile;
+      setProfiles(updatedProfiles);
+
+      // Save to Firebase
+      if (updatedProfile.docId) {
+        console.log('Updating profile:', {
+          field,
+          oldValue: currentProfile[field],
+          newValue,
+          profileId: updatedProfile.docId
+        });
+
+        profilesDB.update(updatedProfile.docId, {
+          [field]: newValue
+        }).catch(err => {
+          console.error('Error saving to Firebase:', err);
+          setError('Failed to save changes');
+          // Revert on error
+          setProfiles([...profiles]);
+        });
+      }
     }
   };
 
@@ -681,6 +717,7 @@ export default function SheetComparison() {
                             onChange={(e) => handleNumberInput(index, 'dateColumn', e)}
                             onKeyDown={(e) => handleNumberInput(index, 'dateColumn', e)}
                             min="1"
+                            step="1"
                           />
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
