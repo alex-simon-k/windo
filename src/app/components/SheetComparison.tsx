@@ -735,15 +735,24 @@ export default function SheetComparison() {
   // Update the sorting function
   const getSortedProfiles = (profiles: SheetProfile[]) => {
     return [...profiles].sort((a, b) => {
+      const deltaA = calculateDelta(entryCounts, a.name);
+      const deltaB = calculateDelta(entryCounts, b.name);
+      
+      // Get absolute values of changes
+      const magnitudeA = Math.abs(deltaA?.change || 0);
+      const magnitudeB = Math.abs(deltaB?.change || 0);
+      
       if (sortBy === 'magnitude') {
-        const deltaA = calculateDelta(entryCounts, a.name);
-        const deltaB = calculateDelta(entryCounts, b.name);
+        // If both have zero delta, sort by today's entry count
+        if (magnitudeA === 0 && magnitudeB === 0) {
+          const todayA = deltaA?.today || 0;
+          const todayB = deltaB?.today || 0;
+          // Sort by highest count first
+          return todayB - todayA;
+        }
         
-        // Use absolute value of the change (not percentage)
-        const magnitudeA = Math.abs(deltaA?.change || 0);
-        const magnitudeB = Math.abs(deltaB?.change || 0);
-        
-        return magnitudeB - magnitudeA; // Sort by highest magnitude first
+        // Otherwise sort by delta magnitude
+        return magnitudeB - magnitudeA;
       } else {
         // Default to name sorting
         return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
@@ -985,8 +994,8 @@ export default function SheetComparison() {
                     onChange={(e) => setSortBy(e.target.value as 'magnitude' | 'name')}
                     className="border rounded p-1 text-sm"
                   >
-                    <option value="magnitude">Delta Magnitude</option>
-                    <option value="name">Name</option>
+                    <option value="magnitude">Delta Magnitude (then Today&apos;s Count)</option>
+                    <option value="name">Profile Name</option>
                   </select>
                 </div>
               </div>
