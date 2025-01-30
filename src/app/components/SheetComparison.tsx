@@ -67,6 +67,14 @@ interface FilterEditorProps {
   onChange: (filterGroups: FilterGroup[]) => void;
 }
 
+interface CurrentEntriesModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  entries: string[];
+  profileName: string;
+  columnIndex: number;
+}
+
 function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnChangesModalProps) {
   if (!isOpen || !changes) return null;
 
@@ -260,6 +268,52 @@ function FilterEditor({ filterGroups, onChange }: FilterEditorProps) {
   );
 }
 
+function CurrentEntriesModal({ isOpen, onClose, entries, profileName, columnIndex }: CurrentEntriesModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Current Entries for {profileName}</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="text-sm text-gray-600">
+            Showing all current entries from column {columnIndex}
+            <div className="text-xs mt-1">
+              Total entries: {entries.length}
+            </div>
+          </div>
+          
+          <div className="bg-white border rounded-lg">
+            {entries.length > 0 ? (
+              <div className="divide-y">
+                {entries.map((entry, index) => (
+                  <div key={index} className="p-2 hover:bg-gray-50 flex items-center space-x-2">
+                    <span className="text-gray-400 text-sm">{index + 1}.</span>
+                    <span className="text-gray-800">{entry}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500 italic p-4">No entries found</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SheetComparison() {
   const [profiles, setProfiles] = useState<SheetProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -279,6 +333,11 @@ export default function SheetComparison() {
   const [selectedChanges, setSelectedChanges] = useState<{
     changes: ColumnChange | undefined;
     profileName: string;
+  } | null>(null);
+  const [currentEntries, setCurrentEntries] = useState<{
+    entries: string[];
+    profileName: string;
+    columnIndex: number;
   } | null>(null);
 
   // Load profiles and analytics on mount
@@ -837,6 +896,23 @@ export default function SheetComparison() {
     };
   };
 
+  // Add function to get current entries
+  const getCurrentEntries = (
+    sheetData: SheetData[],
+    columnIndex: number
+  ): string[] => {
+    const today = new Date();
+    const formattedDate = format(today, 'yyyy-MM-dd');
+
+    return sheetData
+      .filter(row => {
+        const rowDate = row.date.split(' ')[0];
+        return rowDate === formattedDate && row.matchesFilters;
+      })
+      .map(row => row.values[columnIndex - 1]?.trim())
+      .filter(Boolean);
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
@@ -1075,7 +1151,33 @@ export default function SheetComparison() {
                     // View Mode - existing code
                     <>
                       <div className="col-span-3 font-medium truncate">
-                        {profile.name}
+                        {profile.analysisColumn ? (
+                          <button
+                            onClick={() => {
+                              const columnNum = parseInt(profile.analysisColumn || '0');
+                              if (columnNum > 0) {
+                                const sheetData = sheetDataMap[profile.name];
+                                if (sheetData) {
+                                  const entries = getCurrentEntries(sheetData, columnNum);
+                                  setCurrentEntries({
+                                    entries,
+                                    profileName: profile.name,
+                                    columnIndex: columnNum
+                                  });
+                                } else {
+                                  alert('Please refresh the data to view entries.');
+                                }
+                              } else {
+                                alert('Please set an Analysis Column in the profile settings first.');
+                              }
+                            }}
+                            className="hover:text-blue-600 text-left"
+                          >
+                            {profile.name}
+                          </button>
+                        ) : (
+                          <span>{profile.name}</span>
+                        )}
                       </div>
                       <div className="col-span-2 text-center">
                         {delta && (
@@ -1181,6 +1283,14 @@ export default function SheetComparison() {
         onClose={() => setSelectedChanges(null)}
         changes={selectedChanges?.changes}
         profileName={selectedChanges?.profileName ?? ''}
+      />
+
+      <CurrentEntriesModal
+        isOpen={currentEntries !== null}
+        onClose={() => setCurrentEntries(null)}
+        entries={currentEntries?.entries ?? []}
+        profileName={currentEntries?.profileName ?? ''}
+        columnIndex={currentEntries?.columnIndex ?? 0}
       />
     </div>
   );
