@@ -32,6 +32,7 @@ export interface SheetProfile {
   createdAt?: string;
   updatedAt?: string;
   analysisColumn?: string;
+  extraColumn?: string;
 }
 
 interface AnalyticsData {

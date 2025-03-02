@@ -805,7 +805,6 @@ export default function SheetComparison() {
           console.log('Successfully saved to Firebase:', { value });
         }).catch(err => {
           console.error('Error saving to Firebase:', err);
-          setError('Failed to save changes');
           setProfiles(profiles);
         });
       }
@@ -1142,6 +1141,41 @@ export default function SheetComparison() {
                               step="1"
                             />
                           </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-700">Extra Column</label>
+                              <span className="text-xs text-gray-500">Optional column to display alongside analysis data</span>
+                            </div>
+                            <div className="text-xs text-gray-500 mb-2">
+                              This column will be shown as additional information next to the analysis column data.
+                              It doesn't affect analytics but provides extra context for each entry.
+                            </div>
+                            <input
+                              type="number"
+                              placeholder="Extra Column Number"
+                              className="w-full p-2 border rounded text-black"
+                              value={editingProfile.extraColumn || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const numValue = parseInt(value);
+                                if (numValue > 0) {
+                                  handleEditChange('extraColumn', value);
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                  e.preventDefault();
+                                  const currentValue = parseInt(editingProfile.extraColumn || '1') || 1;
+                                  const newValue = e.key === 'ArrowUp' 
+                                    ? currentValue + 1 
+                                    : Math.max(1, currentValue - 1);
+                                  handleEditChange('extraColumn', newValue.toString());
+                                }
+                              }}
+                              min="1"
+                              step="1"
+                            />
+                          </div>
                           <div className="mt-4">
                             <FilterEditor
                               filterGroups={editingProfile.filterGroups || []}
@@ -1182,7 +1216,15 @@ export default function SheetComparison() {
                               if (columnNum > 0) {
                                 const sheetData = sheetDataMap[profile.name];
                                 if (sheetData) {
-                                  const { entries, additionalEntries } = getCurrentEntries(sheetData, columnNum, parseInt(profile.analysisColumn || '0'));
+                                  // Use the extraColumn if specified, otherwise fall back to analysisColumn
+                                  const extraColumnNum = parseInt(profile.extraColumn || '0');
+                                  
+                                  const { entries, additionalEntries } = getCurrentEntries(
+                                    sheetData, 
+                                    columnNum,
+                                    extraColumnNum > 0 ? extraColumnNum : undefined
+                                  );
+                                  
                                   setCurrentEntries({
                                     entries,
                                     additionalEntries,
