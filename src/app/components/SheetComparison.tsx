@@ -71,6 +71,7 @@ interface CurrentEntriesModalProps {
   isOpen: boolean;
   onClose: () => void;
   entries: string[];
+  additionalEntries?: string[];
   profileName: string;
   columnIndex: number;
 }
@@ -268,7 +269,7 @@ function FilterEditor({ filterGroups, onChange }: FilterEditorProps) {
   );
 }
 
-function CurrentEntriesModal({ isOpen, onClose, entries, profileName, columnIndex }: CurrentEntriesModalProps) {
+function CurrentEntriesModal({ isOpen, onClose, entries, additionalEntries, profileName, columnIndex }: CurrentEntriesModalProps) {
   if (!isOpen) return null;
 
   return (
@@ -336,6 +337,7 @@ export default function SheetComparison() {
   } | null>(null);
   const [currentEntries, setCurrentEntries] = useState<{
     entries: string[];
+    additionalEntries?: string[];
     profileName: string;
     columnIndex: number;
   } | null>(null);
@@ -905,21 +907,34 @@ export default function SheetComparison() {
     };
   };
 
-  // Add function to get current entries
+  // Update the getCurrentEntries function to also get additional column data
   const getCurrentEntries = (
     sheetData: SheetData[],
-    columnIndex: number
-  ): string[] => {
+    columnIndex: number,
+    additionalColumnIndex?: number
+  ): { entries: string[], additionalEntries?: string[] } => {
     const today = new Date();
     const formattedDate = format(today, 'yyyy-MM-dd');
 
-    return sheetData
+    const filteredRows = sheetData
       .filter(row => {
         const rowDate = row.date.split(' ')[0];
         return rowDate === formattedDate && row.matchesFilters;
-      })
+      });
+    
+    const entries = filteredRows
       .map(row => row.values[columnIndex - 1]?.trim())
       .filter(Boolean);
+    
+    // If additional column is specified, get that data too
+    let additionalEntries: string[] | undefined;
+    if (additionalColumnIndex) {
+      additionalEntries = filteredRows
+        .map(row => row.values[additionalColumnIndex - 1]?.trim())
+        .filter(Boolean);
+    }
+    
+    return { entries, additionalEntries };
   };
 
   return (
@@ -1167,9 +1182,10 @@ export default function SheetComparison() {
                               if (columnNum > 0) {
                                 const sheetData = sheetDataMap[profile.name];
                                 if (sheetData) {
-                                  const entries = getCurrentEntries(sheetData, columnNum);
+                                  const { entries, additionalEntries } = getCurrentEntries(sheetData, columnNum, parseInt(profile.analysisColumn || '0'));
                                   setCurrentEntries({
                                     entries,
+                                    additionalEntries,
                                     profileName: profile.name,
                                     columnIndex: columnNum
                                   });
@@ -1298,6 +1314,7 @@ export default function SheetComparison() {
         isOpen={currentEntries !== null}
         onClose={() => setCurrentEntries(null)}
         entries={currentEntries?.entries ?? []}
+        additionalEntries={currentEntries?.additionalEntries}
         profileName={currentEntries?.profileName ?? ''}
         columnIndex={currentEntries?.columnIndex ?? 0}
       />
