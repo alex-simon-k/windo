@@ -1,6 +1,7 @@
 'use client';
 
 import { useSettings } from '@/lib/contexts/SettingsContext';
+import AdditionalColumnToggle from './AdditionalColumnToggle';
 
 interface CurrentEntriesModalProps {
   isOpen: boolean;
