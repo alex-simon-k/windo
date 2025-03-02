@@ -8,6 +8,8 @@ import { PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline';
 import { useSettings } from '@/lib/contexts/SettingsContext';
 import AdditionalColumnToggle from './AdditionalColumnToggle';
+import { arrayToCSV, downloadCSV, formatDateForFilename } from '@/app/lib/csvExport';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 
 interface SheetConfig {
   id: string;
@@ -954,6 +956,92 @@ export default function SheetComparison() {
     return { entries, additionalEntries };
   };
 
+  const exportToCSV = () => {
+    if (Object.keys(sheetDataMap).length === 0) {
+      alert('Please refresh the data for all profiles before exporting.');
+      return;
+    }
+
+    try {
+      // Prepare data for all three sheets
+      const currentEntriesData: string[][] = [['Profile', 'Entry ID', 'Extra Data']];
+      const closedEntriesData: string[][] = [['Profile', 'Entry ID', 'Date Closed']];
+      const newEntriesData: string[][] = [['Profile', 'Entry ID', 'Date Added']];
+      
+      // Process each profile
+      profiles.forEach(profile => {
+        const sheetData = sheetDataMap[profile.name];
+        if (!sheetData || !profile.analysisColumn) return;
+        
+        const columnNum = parseInt(profile.analysisColumn);
+        const extraColumnNum = parseInt(profile.extraColumn || '0');
+        
+        if (columnNum <= 0) return;
+        
+        // Get current entries
+        const today = new Date();
+        const formattedToday = format(today, 'yyyy-MM-dd');
+        
+        const currentRows = sheetData.filter(row => {
+          const rowDate = row.date.split(' ')[0];
+          return rowDate === formattedToday && row.matchesFilters;
+        });
+        
+        // Add current entries to the first sheet
+        currentRows.forEach(row => {
+          const entryId = row.values[columnNum - 1]?.trim();
+          if (entryId) {
+            const extraData = extraColumnNum > 0 ? row.values[extraColumnNum - 1]?.trim() || '' : '';
+            currentEntriesData.push([profile.name, entryId, extraData]);
+          }
+        });
+        
+        // Get closed and new entries
+        const sortedEntries = entryCounts
+          .filter(entry => entry.sheetName === profile.name)
+          .sort((a, b) => b.date.localeCompare(a.date));
+        
+        if (sortedEntries.length >= 2) {
+          const columnChanges = analyzeColumnChanges(
+            sheetData,
+            columnNum,
+            sortedEntries[1].date, // yesterday
+            sortedEntries[0].date  // today
+          );
+          
+          if (columnChanges) {
+            // Add closed entries
+            columnChanges.removed.forEach(entry => {
+              closedEntriesData.push([profile.name, entry, columnChanges.date1]);
+            });
+            
+            // Add new entries
+            columnChanges.added.forEach(entry => {
+              newEntriesData.push([profile.name, entry, columnChanges.date2]);
+            });
+          }
+        }
+      });
+      
+      // Generate CSV content with all three sheets
+      const csvContent = 
+        "Current Entries\n" +
+        arrayToCSV(currentEntriesData) +
+        "\n\nClosed Entries\n" +
+        arrayToCSV(closedEntriesData) +
+        "\n\nNew Entries\n" +
+        arrayToCSV(newEntriesData);
+      
+      // Download the CSV file
+      const filename = `profile-entries-${formatDateForFilename()}.csv`;
+      downloadCSV(csvContent, filename);
+      
+    } catch (err) {
+      console.error('Error exporting to CSV:', err);
+      alert('Failed to export data. See console for details.');
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
@@ -966,7 +1054,15 @@ export default function SheetComparison() {
               </p>
             )}
           </div>
-          <div className="flex space-x-3">
+          <div className="flex space-x-4">
+            <button
+              onClick={exportToCSV}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+              title="Export all entries to CSV"
+            >
+              <ArrowDownTrayIcon className="h-5 w-5" />
+              <span>Export CSV</span>
+            </button>
             <button
               onClick={refreshAllProfiles}
               disabled={refreshing.length > 0}
