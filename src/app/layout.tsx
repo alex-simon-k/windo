@@ -1,4 +1,6 @@
 import "./globals.css";
+import { PasswordProvider } from '@/lib/contexts/PasswordContext';
+import ProtectedLayout from './components/ProtectedLayout';
 
 export default function RootLayout({
   children,
@@ -7,7 +9,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <PasswordProvider>
+          <ProtectedLayout>
+            {children}
+          </ProtectedLayout>
+        </PasswordProvider>
+      </body>
     </html>
   );
 }
