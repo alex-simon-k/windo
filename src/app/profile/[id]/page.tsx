@@ -1,6 +1,4 @@
-import { Suspense } from 'react';
 import ProfileDetailView from '@/app/components/ProfileDetailView';
-import LoadingSpinner from '@/app/components/LoadingSpinner';
 
 // This is a mock function - replace with your actual data fetching logic
 async function getProfileData(id: string) {
@@ -27,9 +25,5 @@ async function getProfileData(id: string) {
 export default async function ProfilePage({ params }: { params: { id: string } }) {
   const profileData = await getProfileData(params.id);
   
-  return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <ProfileDetailView profile={profileData} />
-    </Suspense>
-  );
+  return <ProfileDetailView profile={profileData} />;
 } 
