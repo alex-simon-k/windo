@@ -1148,7 +1148,7 @@ export default function SheetComparison() {
                             </div>
                             <div className="text-xs text-gray-500 mb-2">
                               This column will be shown as additional information next to the analysis column data.
-                              It doesn't affect analytics but provides extra context for each entry.
+                              It doesn&apos;t affect analytics but provides extra context for each entry.
                             </div>
                             <input
                               type="number"
