@@ -22,7 +22,7 @@ export default function ProfileDetailView({ profile }: { profile: ProfileData })
     <div className="container mx-auto p-4">
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-bold">{profile.name}'s Profile</h1>
+          <h1 className="text-2xl font-bold">{profile.name}&apos;s Profile</h1>
           <div className="flex items-center">
             <SettingsToggle />
           </div>
