@@ -6,6 +6,8 @@ import { format, subDays, parseISO } from 'date-fns';
 import { profilesDB, SheetProfile, FilterConfig, FilterGroup } from '@/app/lib/firebase/profilesDB';
 import { PencilIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline';
+import { useSettings } from '@/lib/contexts/SettingsContext';
+import AdditionalColumnToggle from './AdditionalColumnToggle';
 
 interface SheetConfig {
   id: string;
@@ -269,7 +271,9 @@ function FilterEditor({ filterGroups, onChange }: FilterEditorProps) {
   );
 }
 
-function CurrentEntriesModal({ isOpen, onClose, entries, additionalEntries, profileName, columnIndex }: CurrentEntriesModalProps) {
+function CurrentEntriesModal({ isOpen, onClose, entries, additionalEntries = [], profileName, columnIndex }: CurrentEntriesModalProps) {
+  const { showAdditionalColumn } = useSettings();
+  
   if (!isOpen) return null;
 
   return (
@@ -295,13 +299,26 @@ function CurrentEntriesModal({ isOpen, onClose, entries, additionalEntries, prof
             </div>
           </div>
           
+          <div className="mb-4">
+            <AdditionalColumnToggle />
+          </div>
+          
           <div className="bg-white border rounded-lg">
             {entries.length > 0 ? (
               <div className="divide-y">
                 {entries.map((entry, index) => (
-                  <div key={index} className="p-2 hover:bg-gray-50 flex items-center space-x-2">
-                    <span className="text-gray-400 text-sm">{index + 1}.</span>
-                    <span className="text-gray-800">{entry}</span>
+                  <div key={index} className="p-2 hover:bg-gray-50 flex items-center">
+                    <span className="text-gray-400 text-sm mr-2">{index + 1}.</span>
+                    <div className="flex-1">
+                      <span className="text-gray-800">{entry}</span>
+                      
+                      {/* Show additional column data if enabled and available */}
+                      {showAdditionalColumn && additionalEntries[index] && (
+                        <span className="ml-4 text-blue-600 border-l border-gray-300 pl-4">
+                          {additionalEntries[index]}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -398,14 +415,12 @@ export default function SheetComparison() {
   const loadProfiles = async () => {
     try {
       setLoading(true);
-      const fetchedProfiles = await profilesDB.getAll();
-      // Sort alphabetically by name
-      setProfiles(fetchedProfiles.sort((a, b) => 
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-      ));
+      const loadedProfiles = await profilesDB.getAll();
+      console.log('Loaded profiles:', loadedProfiles);
+      setProfiles(loadedProfiles);
     } catch (err) {
+      console.error('Error loading profiles:', err);
       setError('Failed to load profiles');
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -438,50 +453,47 @@ export default function SheetComparison() {
     setIsEditing(null);
   };
 
-  const handleEditChange = (
-    field: keyof SheetProfile,
-    value: string | FilterConfig[] | FilterGroup[]
-  ) => {
+  const handleEditChange = (field: string, value: any) => {
     if (!editingProfile) return;
-
-    console.log('Editing change:', { field, value });
-    setEditingProfile(prev => prev ? {
-      ...prev,
+    
+    console.log('Editing field:', field, 'with value:', value);
+    
+    setEditingProfile({
+      ...editingProfile,
       [field]: value
-    } : null);
+    });
   };
 
   const saveProfile = async (profile: SheetProfile) => {
     try {
-      if (!editingProfile || !profile.docId) return;
-
-      console.log('Saving profile:', editingProfile);
-
-      await profilesDB.update(profile.docId, {
-        id: editingProfile.id,
-        range: editingProfile.range,
-        dateColumn: editingProfile.dateColumn,
-        name: editingProfile.name,
-        filterGroups: editingProfile.filterGroups || [],
-        analysisColumn: editingProfile.analysisColumn
-      });
-
-      // Update the profiles list
-      setProfiles(prevProfiles => 
-        prevProfiles.map(p => 
-          p.docId === profile.docId ? editingProfile : p
-        )
+      if (!editingProfile) return;
+      
+      // Make sure we're including the extraColumn in the update
+      const updatedProfile = {
+        ...editingProfile,
+        // Make sure other fields are included
+      };
+      
+      // Log what we're saving to help debug
+      console.log('Saving profile with extraColumn:', updatedProfile.extraColumn);
+      
+      if (updatedProfile.docId) {
+        await profilesDB.update(updatedProfile.docId, updatedProfile);
+        console.log('Profile updated successfully');
+      } else {
+        // Handle new profile creation
+      }
+      
+      // Update the local state
+      const updatedProfiles = profiles.map(p => 
+        p.id === updatedProfile.id ? updatedProfile : p
       );
-
-      // Clear editing state
-      setEditingProfile(null);
+      setProfiles(updatedProfiles);
       setIsEditing(null);
-
-      // Reload profiles to get fresh data
-      await loadProfiles();
+      setEditingProfile(null);
     } catch (err) {
-      console.error('Failed to save profile:', err);
-      setError('Failed to save profile: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      console.error('Error saving profile:', err);
+      setError('Failed to save profile');
     }
   };
 
@@ -912,6 +924,8 @@ export default function SheetComparison() {
     columnIndex: number,
     additionalColumnIndex?: number
   ): { entries: string[], additionalEntries?: string[] } => {
+    console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
+    
     const today = new Date();
     const formattedDate = format(today, 'yyyy-MM-dd');
 
@@ -920,6 +934,8 @@ export default function SheetComparison() {
         const rowDate = row.date.split(' ')[0];
         return rowDate === formattedDate && row.matchesFilters;
       });
+    
+    console.log('Filtered rows count:', filteredRows.length);
     
     const entries = filteredRows
       .map(row => row.values[columnIndex - 1]?.trim())
@@ -931,6 +947,8 @@ export default function SheetComparison() {
       additionalEntries = filteredRows
         .map(row => row.values[additionalColumnIndex - 1]?.trim())
         .filter(Boolean);
+      
+      console.log('Additional entries count:', additionalEntries.length);
     }
     
     return { entries, additionalEntries };
@@ -1219,11 +1237,16 @@ export default function SheetComparison() {
                                   // Use the extraColumn if specified, otherwise fall back to analysisColumn
                                   const extraColumnNum = parseInt(profile.extraColumn || '0');
                                   
+                                  console.log('Profile:', profile);
+                                  console.log('Extra column number:', extraColumnNum);
+                                  
                                   const { entries, additionalEntries } = getCurrentEntries(
                                     sheetData, 
                                     columnNum,
                                     extraColumnNum > 0 ? extraColumnNum : undefined
                                   );
+                                  
+                                  console.log('Entries:', entries.length, 'Additional entries:', additionalEntries?.length);
                                   
                                   setCurrentEntries({
                                     entries,
@@ -1279,8 +1302,6 @@ export default function SheetComparison() {
                                       } else {
                                         alert('No specific changes found in the selected column.');
                                       }
-                                    } else {
-                                      alert('Please refresh the data to view changes.');
                                     }
                                   }
                                 }}
