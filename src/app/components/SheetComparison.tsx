@@ -1084,6 +1084,42 @@ export default function SheetComparison() {
     }
   };
 
+  // Add this function inside the SheetComparison component
+  const getCurrentEntries = (
+    sheetData: SheetData[],
+    columnIndex: number,
+    additionalColumnIndex?: number // For the extra column data
+  ): { entries: string[], additionalEntries?: string[] } => {
+    console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
+    
+    const today = new Date();
+    const formattedDate = format(today, 'yyyy-MM-dd');
+
+    const filteredRows = sheetData
+      .filter(row => {
+        const rowDate = row.date.split(' ')[0];
+        return rowDate === formattedDate && row.matchesFilters;
+      });
+    
+    console.log('Filtered rows count:', filteredRows.length);
+    
+    const entries = filteredRows
+      .map(row => row.values[columnIndex - 1]?.trim())
+      .filter(Boolean);
+    
+    // If additional column is specified, get that data too
+    let additionalEntries: string[] | undefined;
+    if (additionalColumnIndex) {
+      additionalEntries = filteredRows
+        .map(row => row.values[additionalColumnIndex - 1]?.trim())
+        .filter(Boolean);
+      
+      console.log('Additional entries count:', additionalEntries.length);
+    }
+    
+    return { entries, additionalEntries };
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto text-black">
       <div className="space-y-4">
