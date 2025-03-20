@@ -10,6 +10,7 @@ import { useSettings } from '@/lib/contexts/SettingsContext';
 import AdditionalColumnToggle from './AdditionalColumnToggle';
 import { arrayToCSV, downloadCSV, formatDateForFilename } from '@/app/lib/csvExport';
 import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import CustomDateComparison from './CustomDateComparison';
 
 interface SheetConfig {
   id: string;
@@ -104,9 +105,9 @@ function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnCha
             <div className="text-xs">
               Comparing entries between:
               <div className="font-mono mt-1">
-                Yesterday: {changes.date1}
+                {changes.date1}
                 <br />
-                Today: {changes.date2}
+                {changes.date2}
               </div>
             </div>
           </div>
@@ -360,6 +361,7 @@ export default function SheetComparison() {
     profileName: string;
     columnIndex: number;
   } | null>(null);
+  const [customCompareDate, setCustomCompareDate] = useState<string | null>(null);
 
   // Load profiles and analytics on mount
   useEffect(() => {
@@ -835,11 +837,14 @@ export default function SheetComparison() {
     date2: string
   ): ColumnChange | undefined => {
     try {
+      // If using a custom date, use that instead of yesterday
+      const compareDate = customCompareDate || date1;
+      
       // Get entries for both days, ensuring we only look at filtered data
       const day1Entries = sheetData
         .filter(row => {
           const rowDate = row.date.split(' ')[0];
-          return rowDate === date1 && row.matchesFilters;
+          return rowDate === compareDate && row.matchesFilters;
         })
         .map(row => row.values[columnIndex - 1]?.trim())
         .filter(Boolean);
@@ -853,7 +858,7 @@ export default function SheetComparison() {
         .filter(Boolean);
 
       console.log('Analyzing changes:', {
-        date1,
+        date1: compareDate,
         date2,
         day1EntriesCount: day1Entries.length,
         day2EntriesCount: day2Entries.length,
@@ -879,7 +884,7 @@ export default function SheetComparison() {
         added,
         removed,
         column: columnIndex,
-        date1,
+        date1: compareDate,
         date2
       };
     } catch (err) {
@@ -894,7 +899,8 @@ export default function SheetComparison() {
     sheetData: SheetData[],
     columnToAnalyze?: number
   ): DeltaDetails | null => {
-    const delta = calculateDelta(entryCounts, sheetName);
+    // Calculate delta between today and custom date or yesterday
+    const delta = calculateDeltaWithCustomDate(entryCounts, sheetName, customCompareDate);
     if (!delta) return null;
 
     // If there's no column to analyze or no change, just return the delta
@@ -907,10 +913,22 @@ export default function SheetComparison() {
 
     if (sortedEntries.length < 2) return { change: delta };
 
+    // If using custom date, find it in the entries
+    let compareDate = sortedEntries[1].date; // Default to yesterday
+    
+    if (customCompareDate) {
+      const customDateEntry = entryCounts.find(
+        entry => entry.sheetName === sheetName && entry.date === customCompareDate
+      );
+      if (customDateEntry) {
+        compareDate = customDateEntry.date;
+      }
+    }
+
     const columnChanges = analyzeColumnChanges(
       sheetData,
       columnToAnalyze,
-      sortedEntries[1].date, // yesterday
+      compareDate,
       sortedEntries[0].date  // today
     );
 
@@ -920,42 +938,55 @@ export default function SheetComparison() {
     };
   };
 
-  // Update the getCurrentEntries function to also get additional column data
-  const getCurrentEntries = (
-    sheetData: SheetData[],
-    columnIndex: number,
-    additionalColumnIndex?: number
-  ): { entries: string[], additionalEntries?: string[] } => {
-    console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
-    
-    const today = new Date();
-    const formattedDate = format(today, 'yyyy-MM-dd');
+  // Add this function to calculate delta with custom date
+  const calculateDeltaWithCustomDate = (
+    entryCounts: EntryCount[], 
+    sheetName: string,
+    customDate: string | null
+  ): DeltaChange | null => {
+    const sortedEntries = entryCounts
+      .filter(entry => entry.sheetName === sheetName)
+      .sort((a, b) => b.date.localeCompare(a.date));
 
-    const filteredRows = sheetData
-      .filter(row => {
-        const rowDate = row.date.split(' ')[0];
-        return rowDate === formattedDate && row.matchesFilters;
-      });
+    if (sortedEntries.length < 1) return null;
     
-    console.log('Filtered rows count:', filteredRows.length);
+    // Today's entries
+    const today = sortedEntries[0].count;
     
-    const entries = filteredRows
-      .map(row => row.values[columnIndex - 1]?.trim())
-      .filter(Boolean);
+    // Custom date or yesterday's entries
+    let compareCount = 0;
     
-    // If additional column is specified, get that data too
-    let additionalEntries: string[] | undefined;
-    if (additionalColumnIndex) {
-      additionalEntries = filteredRows
-        .map(row => row.values[additionalColumnIndex - 1]?.trim())
-        .filter(Boolean);
+    if (customDate) {
+      // Find the custom date in the entries
+      const customDateEntry = entryCounts.find(
+        entry => entry.sheetName === sheetName && entry.date === customDate
+      );
       
-      console.log('Additional entries count:', additionalEntries.length);
+      if (customDateEntry) {
+        compareCount = customDateEntry.count;
+      } else {
+        // If custom date not found, return null or default to yesterday
+        return null; 
+      }
+    } else if (sortedEntries.length >= 2) {
+      // Use yesterday if no custom date specified
+      compareCount = sortedEntries[1].count;
+    } else {
+      return null; // Not enough data
     }
-    
-    return { entries, additionalEntries };
+
+    const change = today - compareCount;
+    const percentageChange = compareCount === 0 ? 0 : (change / compareCount) * 100;
+
+    return {
+      today,
+      yesterday: compareCount, // This will be either yesterday or custom date count
+      change,
+      percentageChange
+    };
   };
 
+  // Update the exportToCSV function to use custom date
   const exportToCSV = () => {
     if (Object.keys(sheetDataMap).length === 0) {
       alert('Please refresh the data for all profiles before exporting.');
@@ -1002,10 +1033,21 @@ export default function SheetComparison() {
           .sort((a, b) => b.date.localeCompare(a.date));
         
         if (sortedEntries.length >= 2) {
+          let compareDate = sortedEntries[1].date; // Default to yesterday
+          
+          if (customCompareDate) {
+            const customDateEntry = entryCounts.find(
+              entry => entry.sheetName === profile.name && entry.date === customCompareDate
+            );
+            if (customDateEntry) {
+              compareDate = customDateEntry.date;
+            }
+          }
+          
           const columnChanges = analyzeColumnChanges(
             sheetData,
             columnNum,
-            sortedEntries[1].date, // yesterday
+            compareDate,  // Use custom date or yesterday
             sortedEntries[0].date  // today
           );
           
@@ -1115,6 +1157,10 @@ export default function SheetComparison() {
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-semibold">Sheet Profiles</h2>
               <div className="flex items-center space-x-4">
+                <CustomDateComparison 
+                  onCustomDateSelected={setCustomCompareDate}
+                  currentCustomDate={customCompareDate}
+                />
                 <div className="flex items-center space-x-2">
                   <label className="text-sm text-gray-600">Sort by:</label>
                   <select
@@ -1134,7 +1180,13 @@ export default function SheetComparison() {
           <div className="grid grid-cols-12 gap-4 px-4 py-2 bg-gray-100 rounded-t text-sm font-medium">
             <div className="col-span-3">Profile Name</div>
             <div className="col-span-2 text-center">Delta</div>
-            <div className="col-span-3 text-center">Yesterday</div>
+            <div className="col-span-3 text-center">
+              {customCompareDate ? (
+                <span className="font-medium text-blue-600">{customCompareDate}</span>
+              ) : (
+                "Yesterday"
+              )}
+            </div>
             <div className="col-span-3 text-center">Today</div>
             <div className="col-span-1 text-right">Actions</div>
           </div>
