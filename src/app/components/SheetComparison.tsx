@@ -830,6 +830,41 @@ export default function SheetComparison() {
     }
   };
 
+  const getCurrentEntries = (
+    sheetData: SheetData[],
+    columnIndex: number,
+    additionalColumnIndex?: number
+  ): { entries: string[], additionalEntries?: string[] } => {
+    console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
+    
+    const today = new Date();
+    const formattedDate = format(today, 'yyyy-MM-dd');
+
+    const filteredRows = sheetData
+      .filter(row => {
+        const rowDate = row.date.split(' ')[0];
+        return rowDate === formattedDate && row.matchesFilters;
+      });
+    
+    console.log('Filtered rows count:', filteredRows.length);
+    
+    const entries = filteredRows
+      .map(row => row.values[columnIndex - 1]?.trim())
+      .filter(Boolean);
+    
+    // If additional column is specified, get that data too
+    let additionalEntries: string[] | undefined;
+    if (additionalColumnIndex) {
+      additionalEntries = filteredRows
+        .map(row => row.values[additionalColumnIndex - 1]?.trim())
+        .filter(Boolean);
+      
+      console.log('Additional entries count:', additionalEntries.length);
+    }
+    
+    return { entries, additionalEntries };
+  };
+
   const analyzeColumnChanges = (
     sheetData: SheetData[], 
     columnIndex: number,
@@ -878,8 +913,8 @@ export default function SheetComparison() {
         removed
       });
 
-      if (added.length === 0 && removed.length === 0) return undefined;
-
+      // Even if there are no changes, return the object so we can show "no changes found"
+      // instead of just returning undefined
       return {
         added,
         removed,
@@ -899,43 +934,60 @@ export default function SheetComparison() {
     sheetData: SheetData[],
     columnToAnalyze?: number
   ): DeltaDetails | null => {
-    // Calculate delta between today and custom date or yesterday
-    const delta = calculateDeltaWithCustomDate(entryCounts, sheetName, customCompareDate);
-    if (!delta) return null;
-
-    // If there's no column to analyze or no change, just return the delta
-    if (!columnToAnalyze || delta.change === 0) return { change: delta };
-
-    // Get the dates we need to compare
-    const sortedEntries = entryCounts
-      .filter(entry => entry.sheetName === sheetName)
-      .sort((a, b) => b.date.localeCompare(a.date));
-
-    if (sortedEntries.length < 2) return { change: delta };
-
-    // If using custom date, find it in the entries
-    let compareDate = sortedEntries[1].date; // Default to yesterday
-    
-    if (customCompareDate) {
-      const customDateEntry = entryCounts.find(
-        entry => entry.sheetName === sheetName && entry.date === customCompareDate
-      );
-      if (customDateEntry) {
-        compareDate = customDateEntry.date;
+    try {
+      // Calculate delta between today and custom date or yesterday
+      const delta = calculateDeltaWithCustomDate(entryCounts, sheetName, customCompareDate);
+      if (!delta) {
+        console.log('No delta found for', sheetName, 'with custom date:', customCompareDate);
+        return null;
       }
+
+      // If there's no column to analyze, just return the delta
+      if (!columnToAnalyze) return { change: delta };
+
+      // Get the dates we need to compare
+      const sortedEntries = entryCounts
+        .filter(entry => entry.sheetName === sheetName)
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      if (sortedEntries.length < 1) {
+        console.log('Not enough data for', sheetName);
+        return { change: delta };
+      }
+
+      // Today's date
+      const todayDate = sortedEntries[0].date;
+      
+      // If using custom date, find it in the entries
+      let compareDate = sortedEntries.length >= 2 ? sortedEntries[1].date : todayDate; // Default to yesterday
+      
+      if (customCompareDate) {
+        const customDateEntry = entryCounts.find(
+          entry => entry.sheetName === sheetName && entry.date === customCompareDate
+        );
+        if (customDateEntry) {
+          compareDate = customDateEntry.date;
+          console.log('Using custom date for comparison:', compareDate);
+        } else {
+          console.log('Custom date not found in entry counts, falling back to:', compareDate);
+        }
+      }
+
+      const columnChanges = analyzeColumnChanges(
+        sheetData,
+        columnToAnalyze,
+        compareDate,
+        todayDate
+      );
+
+      return {
+        change: delta,
+        columnChanges
+      };
+    } catch (err) {
+      console.error('Error getting delta details:', err);
+      return null;
     }
-
-    const columnChanges = analyzeColumnChanges(
-      sheetData,
-      columnToAnalyze,
-      compareDate,
-      sortedEntries[0].date  // today
-    );
-
-    return {
-      change: delta,
-      columnChanges
-    };
   };
 
   // Add this function to calculate delta with custom date
@@ -1082,42 +1134,6 @@ export default function SheetComparison() {
       console.error('Error exporting to CSV:', err);
       alert('Failed to export data. See console for details.');
     }
-  };
-
-  // Add this function inside the SheetComparison component
-  const getCurrentEntries = (
-    sheetData: SheetData[],
-    columnIndex: number,
-    additionalColumnIndex?: number // For the extra column data
-  ): { entries: string[], additionalEntries?: string[] } => {
-    console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
-    
-    const today = new Date();
-    const formattedDate = format(today, 'yyyy-MM-dd');
-
-    const filteredRows = sheetData
-      .filter(row => {
-        const rowDate = row.date.split(' ')[0];
-        return rowDate === formattedDate && row.matchesFilters;
-      });
-    
-    console.log('Filtered rows count:', filteredRows.length);
-    
-    const entries = filteredRows
-      .map(row => row.values[columnIndex - 1]?.trim())
-      .filter(Boolean);
-    
-    // If additional column is specified, get that data too
-    let additionalEntries: string[] | undefined;
-    if (additionalColumnIndex) {
-      additionalEntries = filteredRows
-        .map(row => row.values[additionalColumnIndex - 1]?.trim())
-        .filter(Boolean);
-      
-      console.log('Additional entries count:', additionalEntries.length);
-    }
-    
-    return { entries, additionalEntries };
   };
 
   return (
