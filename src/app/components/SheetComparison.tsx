@@ -81,7 +81,7 @@ interface CurrentEntriesModalProps {
   columnIndex: number;
 }
 
-// Update the type definition for sheetDataMap to handle error states
+// Add this type definition near the top of the file
 type SheetDataMapValue = SheetData[] | { error: boolean };
 
 function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnChangesModalProps) {
@@ -607,7 +607,7 @@ export default function SheetComparison() {
           // Set an error indicator for this profile in sheetDataMap
           setSheetDataMap(prev => ({
             ...prev,
-            [sheet.name]: { error: true }
+            [sheet.name]: { error: true } as SheetDataMapValue
           }));
         } finally {
           // Remove from refreshing state either way
@@ -1078,7 +1078,7 @@ export default function SheetComparison() {
     };
   };
 
-  // Update the exportToCSV function to correctly handle custom date comparisons
+  // Update the exportToCSV function
   const exportToCSV = () => {
     if (Object.keys(sheetDataMap).length === 0) {
       alert('Please refresh the data for all profiles before exporting.');
@@ -1096,9 +1096,14 @@ export default function SheetComparison() {
       
       // Process each profile
       profiles.forEach(profile => {
-        const sheetData = sheetDataMap[profile.name];
-        if (!sheetData || !profile.analysisColumn) return;
+        const data = sheetDataMap[profile.name];
         
+        // Skip profiles with errors or no analysis column
+        if (!data || !profile.analysisColumn || !Array.isArray(data)) {
+          return;
+        }
+        
+        const sheetData = data;
         const columnNum = parseInt(profile.analysisColumn);
         const extraColumnNum = parseInt(profile.extraColumn || '0');
         
@@ -1201,10 +1206,10 @@ export default function SheetComparison() {
     }
   };
 
-  // Add a helper function to check if a profile has error data
+  // Update the hasProfileError function
   const hasProfileError = (profileName: string): boolean => {
     const data = sheetDataMap[profileName];
-    return data ? 'error' in data : false;
+    return data ? !Array.isArray(data) && 'error' in data : false;
   };
 
   return (
@@ -1503,8 +1508,8 @@ export default function SheetComparison() {
                             onClick={() => {
                               const columnNum = parseInt(profile.analysisColumn || '0');
                               if (columnNum > 0) {
-                                const sheetData = sheetDataMap[profile.name];
-                                if (sheetData) {
+                                const data = sheetDataMap[profile.name];
+                                if (data) {
                                   // Use the extraColumn if specified, otherwise fall back to analysisColumn
                                   const extraColumnNum = parseInt(profile.extraColumn || '0');
                                   
@@ -1512,7 +1517,7 @@ export default function SheetComparison() {
                                   console.log('Extra column number:', extraColumnNum);
                                   
                                   const { entries, additionalEntries } = getCurrentEntries(
-                                    sheetData, 
+                                    data, 
                                     columnNum,
                                     extraColumnNum > 0 ? extraColumnNum : undefined
                                   );
