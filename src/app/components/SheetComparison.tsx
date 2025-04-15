@@ -81,6 +81,9 @@ interface CurrentEntriesModalProps {
   columnIndex: number;
 }
 
+// Update the type definition for sheetDataMap to handle error states
+type SheetDataMapValue = SheetData[] | { error: boolean };
+
 function ColumnChangesModal({ isOpen, onClose, changes, profileName }: ColumnChangesModalProps) {
   if (!isOpen || !changes) return null;
 
@@ -350,7 +353,7 @@ export default function SheetComparison() {
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'magnitude' | 'name'>('magnitude');
   const [editingProfile, setEditingProfile] = useState<SheetProfile | null>(null);
-  const [sheetDataMap, setSheetDataMap] = useState<Record<string, SheetData[]>>({});
+  const [sheetDataMap, setSheetDataMap] = useState<Record<string, SheetDataMapValue>>({});
   const [selectedChanges, setSelectedChanges] = useState<{
     changes: ColumnChange | undefined;
     profileName: string;
@@ -856,10 +859,15 @@ export default function SheetComparison() {
   };
 
   const getCurrentEntries = (
-    sheetData: SheetData[],
+    sheetData: SheetData[] | { error: boolean },
     columnIndex: number,
     additionalColumnIndex?: number
   ): { entries: string[], additionalEntries?: string[] } => {
+    // Check if sheetData is an error object
+    if (!Array.isArray(sheetData)) {
+      return { entries: [] };
+    }
+    
     console.log('Getting entries with columnIndex:', columnIndex, 'additionalColumnIndex:', additionalColumnIndex);
     
     const today = new Date();
@@ -1196,7 +1204,7 @@ export default function SheetComparison() {
   // Add a helper function to check if a profile has error data
   const hasProfileError = (profileName: string): boolean => {
     const data = sheetDataMap[profileName];
-    return data && 'error' in data;
+    return data ? 'error' in data : false;
   };
 
   return (
