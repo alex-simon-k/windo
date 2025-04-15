@@ -531,69 +531,94 @@ export default function SheetComparison() {
     setLoading(true);
     setError(null);
     
+    // Keep track of which profiles fail to load
+    const failedProfiles: string[] = [];
+    
     try {
       for (const sheet of sheetsToAnalyze) {
-        // Include filters in the API request
-        const queryParams = new URLSearchParams({
-          spreadsheetId: sheet.id,
-          range: sheet.range,
-          dateColumn: sheet.dateColumn
-        });
-
-        // Add filters if they exist
-        if (sheet.filterGroups && sheet.filterGroups.length > 0) {
-          queryParams.append('filterGroups', JSON.stringify(sheet.filterGroups));
-        }
-
-        const response = await fetch(`/api/sheets?${queryParams.toString()}`);
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(`Error in ${sheet.name}: ${errorData.error}`);
-        }
-        
-        const sheetData = await response.json();
-        
-        // Store the sheet data
-        setSheetDataMap(prev => ({
-          ...prev,
-          [sheet.name]: sheetData
-        }));
-
-        const sheetComparisons = compareData(
-          sheetData.filter((row: SheetData) => row.matchesFilters),
-          sheet.name
-        );
-        const sheetEntryCounts = countEntriesPerDay(sheetData, sheet.name);
-        
-        // Update only the data for this specific sheet
-        setComparisons(prev => {
-          const filtered = prev.filter(c => c.sheetName !== sheet.name);
-          const updated = [...filtered, ...sheetComparisons];
-          // Save to Firebase after each update
-          profilesDB.saveAnalytics({
-            entryCounts,
-            comparisons: updated,
-            lastUpdated: new Date().toISOString()
+        try {
+          setRefreshing(prev => [...prev, sheet.docId!]);
+          
+          // Include filters in the API request
+          const queryParams = new URLSearchParams({
+            spreadsheetId: sheet.id,
+            range: sheet.range,
+            dateColumn: sheet.dateColumn
           });
-          return updated;
-        });
-        
-        setEntryCounts(prev => {
-          const filtered = prev.filter(c => c.sheetName !== sheet.name);
-          const updated = [...filtered, ...sheetEntryCounts];
-          // Save to Firebase after each update
-          profilesDB.saveAnalytics({
-            entryCounts: updated,
-            comparisons,
-            lastUpdated: new Date().toISOString()
+
+          // Add filters if they exist
+          if (sheet.filterGroups && sheet.filterGroups.length > 0) {
+            queryParams.append('filterGroups', JSON.stringify(sheet.filterGroups));
+          }
+
+          const response = await fetch(`/api/sheets?${queryParams.toString()}`);
+          
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`Error in ${sheet.name}: ${errorData.error}`);
+          }
+          
+          const sheetData = await response.json();
+          
+          // Store the sheet data
+          setSheetDataMap(prev => ({
+            ...prev,
+            [sheet.name]: sheetData
+          }));
+
+          const sheetComparisons = compareData(
+            sheetData.filter((row: SheetData) => row.matchesFilters),
+            sheet.name
+          );
+          const sheetEntryCounts = countEntriesPerDay(sheetData, sheet.name);
+          
+          // Update only the data for this specific sheet
+          setComparisons(prev => {
+            const filtered = prev.filter(c => c.sheetName !== sheet.name);
+            const updated = [...filtered, ...sheetComparisons];
+            // Save to Firebase after each update
+            profilesDB.saveAnalytics({
+              entryCounts,
+              comparisons: updated,
+              lastUpdated: new Date().toISOString()
+            });
+            return updated;
           });
-          return updated;
-        });
+          
+          setEntryCounts(prev => {
+            const filtered = prev.filter(c => c.sheetName !== sheet.name);
+            const updated = [...filtered, ...sheetEntryCounts];
+            // Save to Firebase after each update
+            profilesDB.saveAnalytics({
+              entryCounts: updated,
+              comparisons,
+              lastUpdated: new Date().toISOString()
+            });
+            return updated;
+          });
+        } catch (sheetError) {
+          console.error(`Error fetching data for ${sheet.name}:`, sheetError);
+          // Mark this profile as failed but continue with others
+          failedProfiles.push(sheet.docId!);
+          
+          // Set an error indicator for this profile in sheetDataMap
+          setSheetDataMap(prev => ({
+            ...prev,
+            [sheet.name]: { error: true }
+          }));
+        } finally {
+          // Remove from refreshing state either way
+          setRefreshing(prev => prev.filter(id => id !== sheet.docId));
+        }
+      }
+      
+      // If any profiles failed, show a summary error
+      if (failedProfiles.length > 0) {
+        setError(`Failed to refresh data for ${failedProfiles.length} profile(s). Look for profiles marked with ❌.`);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
-      setError(error instanceof Error ? error.message : 'An error occurred');
+      console.error('Error in fetch operation:', error);
+      setError('An error occurred during refresh. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -872,14 +897,11 @@ export default function SheetComparison() {
     date2: string
   ): ColumnChange | undefined => {
     try {
-      // If using a custom date, use that instead of yesterday
-      const compareDate = customCompareDate || date1;
-      
       // Get entries for both days, ensuring we only look at filtered data
       const day1Entries = sheetData
         .filter(row => {
           const rowDate = row.date.split(' ')[0];
-          return rowDate === compareDate && row.matchesFilters;
+          return rowDate === date1 && row.matchesFilters;
         })
         .map(row => row.values[columnIndex - 1]?.trim())
         .filter(Boolean);
@@ -893,7 +915,7 @@ export default function SheetComparison() {
         .filter(Boolean);
 
       console.log('Analyzing changes:', {
-        date1: compareDate,
+        date1, 
         date2,
         day1EntriesCount: day1Entries.length,
         day2EntriesCount: day2Entries.length,
@@ -908,18 +930,16 @@ export default function SheetComparison() {
 
       console.log('Changes found:', {
         addedCount: added.length,
-        removedCount: removed.length,
-        added,
-        removed
+        removedCount: removed.length
       });
 
-      // Even if there are no changes, return the object so we can show "no changes found"
-      // instead of just returning undefined
+      if (added.length === 0 && removed.length === 0) return undefined;
+
       return {
         added,
         removed,
         column: columnIndex,
-        date1: compareDate,
+        date1,
         date2
       };
     } catch (err) {
@@ -934,60 +954,72 @@ export default function SheetComparison() {
     sheetData: SheetData[],
     columnToAnalyze?: number
   ): DeltaDetails | null => {
-    try {
-      // Calculate delta between today and custom date or yesterday
-      const delta = calculateDeltaWithCustomDate(entryCounts, sheetName, customCompareDate);
-      if (!delta) {
-        console.log('No delta found for', sheetName, 'with custom date:', customCompareDate);
-        return null;
-      }
-
-      // If there's no column to analyze, just return the delta
-      if (!columnToAnalyze) return { change: delta };
-
-      // Get the dates we need to compare
-      const sortedEntries = entryCounts
-        .filter(entry => entry.sheetName === sheetName)
-        .sort((a, b) => b.date.localeCompare(a.date));
-
-      if (sortedEntries.length < 1) {
-        console.log('Not enough data for', sheetName);
-        return { change: delta };
-      }
-
-      // Today's date
-      const todayDate = sortedEntries[0].date;
-      
-      // If using custom date, find it in the entries
-      let compareDate = sortedEntries.length >= 2 ? sortedEntries[1].date : todayDate; // Default to yesterday
-      
-      if (customCompareDate) {
-        const customDateEntry = entryCounts.find(
-          entry => entry.sheetName === sheetName && entry.date === customCompareDate
-        );
-        if (customDateEntry) {
-          compareDate = customDateEntry.date;
-          console.log('Using custom date for comparison:', compareDate);
-        } else {
-          console.log('Custom date not found in entry counts, falling back to:', compareDate);
-        }
-      }
-
-      const columnChanges = analyzeColumnChanges(
-        sheetData,
-        columnToAnalyze,
-        compareDate,
-        todayDate
-      );
-
-      return {
-        change: delta,
-        columnChanges
-      };
-    } catch (err) {
-      console.error('Error getting delta details:', err);
+    // First check if there was an error loading this profile's data
+    if (hasProfileError(sheetName)) {
       return null;
     }
+
+    const sortedEntries = entryCounts
+      .filter(entry => entry.sheetName === sheetName)
+      .sort((a, b) => b.date.localeCompare(a.date));
+
+    if (sortedEntries.length < 1) return null;
+    
+    // Today's date and entries
+    const todayDate = sortedEntries[0].date;
+    const todayCount = sortedEntries[0].count;
+    
+    // Determine compare date (custom date or yesterday)
+    let compareDate = '';
+    let compareCount = 0;
+    
+    if (customCompareDate) {
+      // Try to find the custom date in entries
+      const customEntry = entryCounts.find(
+        entry => entry.sheetName === sheetName && entry.date === customCompareDate
+      );
+      
+      if (customEntry) {
+        compareDate = customEntry.date;
+        compareCount = customEntry.count;
+      }
+    }
+    
+    // If custom date not found or not specified, fall back to yesterday
+    if (!compareDate && sortedEntries.length >= 2) {
+      compareDate = sortedEntries[1].date;
+      compareCount = sortedEntries[1].count;
+    }
+    
+    // If we still don't have a compare date, can't calculate delta
+    if (!compareDate) return null;
+    
+    // Calculate delta
+    const change = todayCount - compareCount;
+    const percentageChange = compareCount === 0 ? 0 : (change / compareCount) * 100;
+    
+    const delta = {
+      today: todayCount,
+      yesterday: compareCount,  // This is either yesterday or custom date count
+      change,
+      percentageChange
+    };
+    
+    // If no column to analyze or no change, just return the delta
+    if (!columnToAnalyze) return { change: delta };
+    
+    // Get column changes
+    const columnChanges = analyzeColumnChanges(
+      sheetData,
+      columnToAnalyze,
+      compareDate,
+      todayDate
+    );
+    
+    return { 
+      change: delta,
+      columnChanges
+    };
   };
 
   // Add this function to calculate delta with custom date
@@ -1038,7 +1070,7 @@ export default function SheetComparison() {
     };
   };
 
-  // Update the exportToCSV function to use custom date
+  // Update the exportToCSV function to correctly handle custom date comparisons
   const exportToCSV = () => {
     if (Object.keys(sheetDataMap).length === 0) {
       alert('Please refresh the data for all profiles before exporting.');
@@ -1046,10 +1078,13 @@ export default function SheetComparison() {
     }
 
     try {
-      // Prepare data for all three sheets
-      const currentEntriesData: string[][] = [['Profile', 'Entry ID', 'Extra Data']];
-      const closedEntriesData: string[][] = [['Profile', 'Entry ID', 'Date Closed']];
-      const newEntriesData: string[][] = [['Profile', 'Entry ID', 'Date Added']];
+      // Prepare data for all three sheets with more descriptive headers
+      const currentEntriesData: string[][] = [['Profile', 'Entry ID', 'Extra Data', 'Source Date']];
+      const closedEntriesData: string[][] = [['Profile', 'Entry ID', 'Removed Since', 'Compare Date']];
+      const newEntriesData: string[][] = [['Profile', 'Entry ID', 'Added Since', 'Compare Date']];
+      
+      const today = new Date();
+      const formattedToday = format(today, 'yyyy-MM-dd');
       
       // Process each profile
       profiles.forEach(profile => {
@@ -1061,10 +1096,7 @@ export default function SheetComparison() {
         
         if (columnNum <= 0) return;
         
-        // Get current entries
-        const today = new Date();
-        const formattedToday = format(today, 'yyyy-MM-dd');
-        
+        // Get current entries (today's data)
         const currentRows = sheetData.filter(row => {
           const rowDate = row.date.split(' ')[0];
           return rowDate === formattedToday && row.matchesFilters;
@@ -1075,43 +1107,67 @@ export default function SheetComparison() {
           const entryId = row.values[columnNum - 1]?.trim();
           if (entryId) {
             const extraData = extraColumnNum > 0 ? row.values[extraColumnNum - 1]?.trim() || '' : '';
-            currentEntriesData.push([profile.name, entryId, extraData]);
+            currentEntriesData.push([profile.name, entryId, extraData, formattedToday]);
           }
         });
         
-        // Get closed and new entries
+        // Get closed and new entries based on comparison with custom or yesterday date
         const sortedEntries = entryCounts
           .filter(entry => entry.sheetName === profile.name)
           .sort((a, b) => b.date.localeCompare(a.date));
         
-        if (sortedEntries.length >= 2) {
-          let compareDate = sortedEntries[1].date; // Default to yesterday
+        if (sortedEntries.length >= 1) {
+          // Determine the comparison date (custom date or yesterday)
+          let compareDate = '';
           
           if (customCompareDate) {
+            // Try to find the custom date in entry counts
             const customDateEntry = entryCounts.find(
               entry => entry.sheetName === profile.name && entry.date === customCompareDate
             );
+            
             if (customDateEntry) {
               compareDate = customDateEntry.date;
             }
+          } 
+          
+          // If no custom date or custom date not found, use yesterday
+          if (!compareDate && sortedEntries.length >= 2) {
+            compareDate = sortedEntries[1].date;
           }
           
-          const columnChanges = analyzeColumnChanges(
-            sheetData,
-            columnNum,
-            compareDate,  // Use custom date or yesterday
-            sortedEntries[0].date  // today
-          );
-          
-          if (columnChanges) {
-            // Add closed entries
-            columnChanges.removed.forEach(entry => {
-              closedEntriesData.push([profile.name, entry, columnChanges.date1]);
+          // Only proceed if we have a valid comparison date
+          if (compareDate) {
+            console.log(`Exporting comparison for ${profile.name} between ${compareDate} and ${formattedToday}`);
+            
+            // Get comparison day entries
+            const compareRows = sheetData.filter(row => {
+              const rowDate = row.date.split(' ')[0];
+              return rowDate === compareDate && row.matchesFilters;
             });
             
-            // Add new entries
-            columnChanges.added.forEach(entry => {
-              newEntriesData.push([profile.name, entry, columnChanges.date2]);
+            const compareEntries = compareRows
+              .map(row => row.values[columnNum - 1]?.trim())
+              .filter(Boolean);
+              
+            const currentEntries = currentRows
+              .map(row => row.values[columnNum - 1]?.trim())
+              .filter(Boolean);
+            
+            // Find closed entries (in compare day but not in today)
+            const closedEntries = compareEntries.filter(entry => !currentEntries.includes(entry));
+            
+            // Find new entries (in today but not in compare day)
+            const newEntries = currentEntries.filter(entry => !compareEntries.includes(entry));
+            
+            // Add closed entries to CSV
+            closedEntries.forEach(entry => {
+              closedEntriesData.push([profile.name, entry, formattedToday, compareDate]);
+            });
+            
+            // Add new entries to CSV
+            newEntries.forEach(entry => {
+              newEntriesData.push([profile.name, entry, formattedToday, compareDate]);
             });
           }
         }
@@ -1126,14 +1182,21 @@ export default function SheetComparison() {
         "\n\nNew Entries\n" +
         arrayToCSV(newEntriesData);
       
-      // Download the CSV file
-      const filename = `profile-entries-${formatDateForFilename()}.csv`;
+      // Download the CSV file with date information in the filename
+      const compareInfo = customCompareDate ? `-vs-${customCompareDate}` : '';
+      const filename = `profile-entries${compareInfo}-${formatDateForFilename()}.csv`;
       downloadCSV(csvContent, filename);
       
     } catch (err) {
       console.error('Error exporting to CSV:', err);
       alert('Failed to export data. See console for details.');
     }
+  };
+
+  // Add a helper function to check if a profile has error data
+  const hasProfileError = (profileName: string): boolean => {
+    const data = sheetDataMap[profileName];
+    return data && 'error' in data;
   };
 
   return (
@@ -1470,48 +1533,22 @@ export default function SheetComparison() {
                         )}
                       </div>
                       <div className="col-span-2 text-center">
-                        {delta && (
-                          <>
-                            <div className={`flex items-center justify-center space-x-1
-                              ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
-                            >
-                              {delta.change > 0 ? (
-                                <ArrowTrendingUpIcon className="h-4 w-4" />
-                              ) : delta.change < 0 ? (
-                                <ArrowTrendingDownIcon className="h-4 w-4" />
-                              ) : null}
-                              <span>
-                                {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
-                              </span>
-                            </div>
-                            {profile.analysisColumn && delta.change !== 0 && (
-                              <button
-                                onClick={() => {
-                                  const columnNum = parseInt(profile.analysisColumn || '0');
-                                  if (columnNum > 0) {
-                                    const sheetData = sheetDataMap[profile.name];
-                                    if (sheetData) {
-                                      console.log('Analyzing column changes for column:', columnNum);
-                                      const details = getDeltaDetails(entryCounts, profile.name, sheetData, columnNum);
-                                      if (details?.columnChanges) {
-                                        console.log('Column changes:', details.columnChanges);
-                                        setSelectedChanges({
-                                          changes: details.columnChanges,
-                                          profileName: profile.name
-                                        });
-                                      } else {
-                                        alert('No specific changes found in the selected column.');
-                                      }
-                                    }
-                                  }
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-800 mt-1"
-                              >
-                                View Changes
-                              </button>
-                            )}
-                          </>
-                        )}
+                        {hasProfileError(profile.name) ? (
+                          <span className="text-red-600 font-bold text-xl" title="Failed to load data">❌</span>
+                        ) : delta ? (
+                          <div className={`flex items-center justify-center space-x-1
+                            ${delta.change > 0 ? 'text-green-600' : delta.change < 0 ? 'text-red-600' : 'text-gray-600'}`}
+                          >
+                            {delta.change > 0 ? (
+                              <ArrowTrendingUpIcon className="h-4 w-4" />
+                            ) : delta.change < 0 ? (
+                              <ArrowTrendingDownIcon className="h-4 w-4" />
+                            ) : null}
+                            <span>
+                              {delta.change > 0 ? '+' : ''}{Math.abs(delta.change)}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                       <div className="col-span-3 text-center font-mono">
                         {delta?.yesterday || 0} entries
